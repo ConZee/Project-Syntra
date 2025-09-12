@@ -8,30 +8,29 @@ import { Box, useColorModeValue } from '@chakra-ui/react';
 // Layout components
 import { SidebarContext } from 'contexts/SidebarContext';
 
-// Custom Chakra theme
 export default function Auth() {
-  // states and functions
   const [toggleSidebar, setToggleSidebar] = useState(false);
-  // functions for changing the states from components
+
   const getRoute = () => {
     return window.location.pathname !== '/auth/full-screen-maps';
   };
+
   const getRoutes = (routes) => {
     return routes.map((route, key) => {
       if (route.layout === '/auth') {
-        return (
-          <Route path={`${route.path}`} element={route.component} key={key} />
-        );
+        // NOTE: route.path must be RELATIVE (e.g., "sign-in"), not "/sign-in"
+        return <Route path={`${route.path}`} element={route.component} key={key} />;
       }
       if (route.collapse) {
         return getRoutes(route.items);
-      } else {
-        return null;
       }
+      return null;
     });
   };
+
   const authBg = useColorModeValue('white', 'navy.900');
   document.documentElement.dir = 'ltr';
+
   return (
     <Box>
       <SidebarContext.Provider
@@ -56,10 +55,7 @@ export default function Auth() {
             <Box mx="auto" minH="100vh">
               <Routes>
                 {getRoutes(routes)}
-                <Route
-                  path="/"
-                  element={<Navigate to="/auth/sign-in/default" replace />}
-                />
+                <Route path="/" element={<Navigate to="/auth/sign-in" replace />} />
               </Routes>
             </Box>
           ) : null}

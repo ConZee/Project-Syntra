@@ -1,12 +1,11 @@
 /* eslint-disable */
 import React from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../../../auth/AuthContext";
-// Chakra imports
+import { useAuth } from "../../../auth/AuthContext"; // adjust if needed
+
 import {
   Box,
   Button,
-  Checkbox,
   Flex,
   FormControl,
   FormLabel,
@@ -15,15 +14,12 @@ import {
   Input,
   InputGroup,
   InputRightElement,
+  Select,
   Text,
   useColorModeValue,
 } from "@chakra-ui/react";
-// Custom components
-import { HSeparator } from "components/separator/Separator";
 import DefaultAuth from "layouts/auth/Default";
-// Assets
 import illustration from "assets/img/auth/auth.png";
-import { FcGoogle } from "react-icons/fc";
 import { MdOutlineRemoveRedEye } from "react-icons/md";
 import { RiEyeCloseLine } from "react-icons/ri";
 
@@ -38,41 +34,44 @@ function SignIn() {
   const location = useLocation();
 
   // Form state
-  const [email, setEmail] = React.useState("");
+  const [userType, setUserType] = React.useState("Platform Admin");
+  const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [err, setErr] = React.useState("");
+
+  const roleMap = {
+    "Platform Admin": "platform_admin",
+    "Network Admin": "network_admin",
+    "Security Analyst": "security_analyst",
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr("");
-
-    // TODO: replace with real API call to backend
-    if (email && password) {
-      const token = "demo-token";
-      const user = { id: "u1", email, role: "admin" };
-      login(token, user);
-      navigate(location.state?.from?.pathname || "/admin", { replace: true });
-    } else {
-      setErr("Invalid credentials");
+    if (!userType || !username || !password) {
+      setErr("Please fill in all fields.");
+      return;
     }
+
+    // TODO: Replace with real API call
+    const token = "demo-token";
+    const user = {
+      id: "u1",
+      username,
+      email: `${username}@example.com`,
+      role: roleMap[userType],
+      displayRole: userType,
+    };
+    login(token, user);
+    navigate(location.state?.from?.pathname || "/admin", { replace: true });
   };
 
-  // Chakra color mode
+  // Chakra colors
   const textColor = useColorModeValue("navy.700", "white");
   const textColorSecondary = "gray.400";
-  const textColorDetails = useColorModeValue("navy.700", "secondaryGray.600");
   const textColorBrand = useColorModeValue("brand.500", "white");
   const brandStars = useColorModeValue("brand.500", "brand.400");
-  const googleBg = useColorModeValue("secondaryGray.300", "whiteAlpha.200");
-  const googleText = useColorModeValue("navy.700", "white");
-  const googleHover = useColorModeValue(
-    { bg: "gray.200" },
-    { bg: "whiteAlpha.300" }
-  );
-  const googleActive = useColorModeValue(
-    { bg: "secondaryGray.300" },
-    { bg: "whiteAlpha.200" }
-  );
+  const textColorDetails = useColorModeValue("navy.700", "secondaryGray.600");
 
   return (
     <DefaultAuth illustrationBackground={illustration} image={illustration}>
@@ -93,14 +92,8 @@ function SignIn() {
           <Heading color={textColor} fontSize="36px" mb="10px">
             Sign In
           </Heading>
-          <Text
-            mb="36px"
-            ms="4px"
-            color={textColorSecondary}
-            fontWeight="400"
-            fontSize="md"
-          >
-            Enter your email and password to sign in!
+          <Text mb="36px" ms="4px" color={textColorSecondary} fontWeight="400" fontSize="md">
+            Choose your role and enter your credentials.
           </Text>
         </Box>
 
@@ -115,67 +108,43 @@ function SignIn() {
           me="auto"
           mb={{ base: "20px", md: "auto" }}
         >
-          <Button
-            fontSize="sm"
-            me="0px"
-            mb="26px"
-            py="15px"
-            h="50px"
-            borderRadius="16px"
-            bg={googleBg}
-            color={googleText}
-            fontWeight="500"
-            _hover={googleHover}
-            _active={googleActive}
-            _focus={googleActive}
-            type="button"
-          >
-            <Icon as={FcGoogle} w="20px" h="20px" me="10px" />
-            Sign in with Google
-          </Button>
-
-          <Flex align="center" mb="25px">
-            <HSeparator />
-            <Text color="gray.400" mx="14px">
-              or
-            </Text>
-            <HSeparator />
-          </Flex>
-
-          {/* Use a real <form> so Enter submits and button type="submit" works */}
           <form onSubmit={handleSubmit}>
             <FormControl>
-              <FormLabel
-                display="flex"
-                ms="4px"
-                fontSize="sm"
-                fontWeight="500"
-                color={textColor}
-                mb="8px"
+              {/* User Type */}
+              <FormLabel display="flex" ms="4px" fontSize="sm" fontWeight="500" color={textColor} mb="8px">
+                User Type<Text color={brandStars}>*</Text>
+              </FormLabel>
+              <Select
+                value={userType}
+                onChange={(e) => setUserType(e.target.value)}
+                mb="24px"
+                size="lg"
+                variant="auth"
               >
-                Email<Text color={brandStars}>*</Text>
+                <option>Platform Admin</option>
+                <option>Network Admin</option>
+                <option>Security Analyst</option>
+              </Select>
+
+              {/* Username */}
+              <FormLabel display="flex" ms="4px" fontSize="sm" fontWeight="500" color={textColor} mb="8px">
+                Username<Text color={brandStars}>*</Text>
               </FormLabel>
               <Input
                 isRequired
                 variant="auth"
                 fontSize="sm"
-                ms={{ base: "0px", md: "0px" }}
-                type="email"
-                placeholder="you@example.com"
+                type="text"
+                placeholder="Enter your username"
                 mb="24px"
                 fontWeight="500"
                 size="lg"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
               />
 
-              <FormLabel
-                ms="4px"
-                fontSize="sm"
-                fontWeight="500"
-                color={textColor}
-                display="flex"
-              >
+              {/* Password */}
+              <FormLabel ms="4px" fontSize="sm" fontWeight="500" color={textColor} display="flex">
                 Password<Text color={brandStars}>*</Text>
               </FormLabel>
               <InputGroup size="md">
@@ -200,60 +169,35 @@ function SignIn() {
                 </InputRightElement>
               </InputGroup>
 
-              <Flex justifyContent="space-between" align="center" mb="24px">
-                <FormControl display="flex" alignItems="center">
-                  <Checkbox id="remember-login" colorScheme="brandScheme" me="10px" />
-                  <FormLabel
-                    htmlFor="remember-login"
-                    mb="0"
-                    fontWeight="normal"
-                    color={textColor}
-                    fontSize="sm"
-                  >
-                    Keep me logged in
-                  </FormLabel>
-                </FormControl>
-                <NavLink to="/auth/forgot-password">
-                  <Text color={textColorBrand} fontSize="sm" w="124px" fontWeight="500">
-                    Forgot password?
-                  </Text>
-                </NavLink>
-              </Flex>
-
               {err && (
                 <Text color="red.400" fontSize="sm" mb="12px">
                   {err}
                 </Text>
               )}
 
-              <Button
-                type="submit"
-                fontSize="sm"
-                variant="brand"
-                fontWeight="500"
-                w="100%"
-                h="50"
-                mb="24px"
-              >
+              <Button type="submit" fontSize="sm" variant="brand" fontWeight="500" w="100%" h="50" mb="12px">
                 Sign In
               </Button>
+
+              <Flex justifyContent="space-between" align="center" mt="8px">
+                <NavLink to="/auth/forgot-password">
+                  <Text color={textColorBrand} fontSize="sm" fontWeight="500">
+                    Forgot password?
+                  </Text>
+                </NavLink>
+
+                <NavLink to="/auth/sign-up">
+                  <Text color={textColorBrand} fontSize="sm" fontWeight="500">
+                    Create an Account
+                  </Text>
+                </NavLink>
+              </Flex>
             </FormControl>
           </form>
 
-          <Flex
-            flexDirection="column"
-            justifyContent="center"
-            alignItems="start"
-            maxW="100%"
-            mt="0px"
-          >
+          <Flex flexDirection="column" justifyContent="center" alignItems="start" maxW="100%" mt="16px">
             <Text color={textColorDetails} fontWeight="400" fontSize="14px">
-              Not registered yet?
-              <NavLink to="/auth/sign-up">
-                <Text color={textColorBrand} as="span" ms="5px" fontWeight="500">
-                  Create an Account
-                </Text>
-              </NavLink>
+              Your access is role-based. Contact a Platform Admin if you need help.
             </Text>
           </Flex>
         </Flex>

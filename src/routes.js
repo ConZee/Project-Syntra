@@ -1,5 +1,4 @@
 import React from 'react';
-
 import { Icon } from '@chakra-ui/react';
 import {
   MdBarChart,
@@ -18,6 +17,7 @@ import RTL from 'views/admin/rtl';
 
 // Auth Imports
 import SignInCentered from 'views/auth/signIn';
+import ForgotPassword from 'views/auth/forgotPassword';
 
 const routes = [
   {
@@ -56,13 +56,23 @@ const routes = [
     icon: <Icon as={MdPerson} width="20px" height="20px" color="inherit" />,
     component: <Profile />,
   },
+
   {
     name: 'Sign In',
     layout: '/auth',
-    path: '/sign-in',
+    path: 'sign-in', 
     icon: <Icon as={MdLock} width="20px" height="20px" color="inherit" />,
     component: <SignInCentered />,
   },
+
+  {
+    name: 'Forgot Password',
+    layout: '/auth',
+    path: 'forgot-password',
+    icon: <Icon as={MdLock} width="20px" height="20px" color="inherit" />,
+    component: <ForgotPassword />,
+  },
+
   {
     name: 'RTL Admin',
     layout: '/rtl',

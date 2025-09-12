@@ -31,8 +31,10 @@ export default function Main() {
             />
           </Route>
 
-          {/* Default redirect to admin (now gated) */}
+          {/* Redirect helpers */}
+          <Route path="login" element={<Navigate to="/auth/sign-in" replace />} />
           <Route path="/" element={<Navigate to="/admin" replace />} />
+          <Route path="*" element={<Navigate to="/auth/sign-in" replace />} />
         </Routes>
       </AuthProvider>
     </ChakraProvider>
