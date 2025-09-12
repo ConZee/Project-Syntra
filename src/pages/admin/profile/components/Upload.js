@@ -12,7 +12,7 @@ import Card from "components/card/Card.js";
 import React from "react";
 // Assets
 import { MdUpload } from "react-icons/md";
-import Dropzone from "views/admin/profile/components/Dropzone";
+import Dropzone from "pages/admin/profile/components/Dropzone";
 
 export default function Upload(props) {
   const { used, total, ...rest } = props;

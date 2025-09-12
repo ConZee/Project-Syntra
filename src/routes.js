@@ -9,15 +9,15 @@ import {
 } from 'react-icons/md';
 
 // Admin Imports
-import MainDashboard from 'views/admin/default';
-import NFTMarketplace from 'views/admin/marketplace';
-import Profile from 'views/admin/profile';
-import DataTables from 'views/admin/dataTables';
-import RTL from 'views/admin/rtl';
+import MainDashboard from 'pages/admin/default';
+import NFTMarketplace from 'pages/admin/marketplace';
+import Profile from 'pages/admin/profile';
+import DataTables from 'pages/admin/dataTables';
+import RTL from 'pages/admin/rtl';
 
 // Auth Imports
-import SignInCentered from 'views/auth/signIn';
-import ForgotPassword from 'views/auth/forgotPassword';
+import SignInCentered from 'pages/auth/signIn';
+import ForgotPassword from 'pages/auth/forgotPassword';
 
 const routes = [
   {
