@@ -1,5 +1,6 @@
+/* eslint-disable */
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import {
   Box,
   Button,
@@ -7,23 +8,24 @@ import {
   FormControl,
   FormLabel,
   Heading,
+  Icon,
   Input,
   Select,
   Text,
   useColorModeValue,
   useToast,
 } from "@chakra-ui/react";
+import { FaChevronLeft } from "react-icons/fa";
 import DefaultAuth from "layouts/auth/Default";
 import illustration from "assets/img/auth/auth.png";
-// Optional: when backend is ready, use axios instance
-// import api from "../../../services/api";
+// import api from "../../../services/api"; // when backend is ready
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
   const toast = useToast();
 
   const [username, setUsername] = React.useState("");
-  const [userType, setUserType] = React.useState("Security Analyst"); // default to least-privileged
+  const [userType, setUserType] = React.useState("Security Analyst");
   const [err, setErr] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
@@ -42,7 +44,6 @@ export default function ForgotPassword() {
     try {
       // TODO: replace with real API call
       // await api.post("/auth/forgot-password", { username, userType });
-      // Simulated success:
       await new Promise((r) => setTimeout(r, 500));
 
       toast({
@@ -63,6 +64,21 @@ export default function ForgotPassword() {
 
   return (
     <DefaultAuth illustrationBackground={illustration} image={illustration}>
+      <NavLink to="/auth/sign-in">
+        <Flex
+          align="center"
+          ps={{ base: "10px", lg: "0px" }}
+          mt={{ base: "24px", md: "40px" }}
+          w="fit-content"
+          mb="24px"
+        >
+          <Icon as={FaChevronLeft} me="10px" h="14px" w="9px" color="secondaryGray.600" />
+          <Text fontSize="sm" color="secondaryGray.600">
+            Back to Login
+          </Text>
+        </Flex>
+      </NavLink>
+
       <Flex
         maxW={{ base: "100%", md: "max-content" }}
         w="100%"
@@ -98,7 +114,7 @@ export default function ForgotPassword() {
         >
           <form onSubmit={handleSubmit}>
             <FormControl>
-              {/* Optional: User Type for context (kept since you track three roles) */}
+              {/* Optional: User Type for context */}
               <FormLabel ms="4px" fontSize="sm" fontWeight="500" color={textColor} display="flex">
                 User Type
               </FormLabel>
@@ -152,18 +168,8 @@ export default function ForgotPassword() {
                 h="50"
                 isLoading={loading}
                 loadingText="Submitting"
-                mb="12px"
               >
                 Submit Request
-              </Button>
-
-              <Button
-                onClick={() => navigate("/auth/sign-in")}
-                variant="ghost"
-                w="100%"
-                h="44px"
-              >
-                Back to Sign In
               </Button>
             </FormControl>
           </form>
