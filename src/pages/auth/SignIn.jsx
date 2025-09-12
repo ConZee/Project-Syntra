@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../../../auth/AuthContext"; // adjust if needed
+import { useAuth } from "../../auth/AuthContext"; // adjust if needed
 
 import {
   Box,

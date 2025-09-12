@@ -33,7 +33,7 @@ export default function Main() {
 
           {/* Redirect helpers */}
           <Route path="login" element={<Navigate to="/auth/sign-in" replace />} />
-          <Route path="/" element={<Navigate to="/admin" replace />} />
+          <Route path="/" element={<Navigate to="/auth/sign-in" replace />} />
           <Route path="*" element={<Navigate to="/auth/sign-in" replace />} />
         </Routes>
       </AuthProvider>

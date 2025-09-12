@@ -16,8 +16,8 @@ import DataTables from 'pages/admin/dataTables';
 import RTL from 'pages/admin/rtl';
 
 // Auth Imports
-import SignInCentered from 'pages/auth/signIn';
-import ForgotPassword from 'pages/auth/forgotPassword';
+import SignIn from 'pages/auth/SignIn';
+import ForgotPassword from 'pages/auth/ForgotPassword';
 
 const routes = [
   {
@@ -62,7 +62,7 @@ const routes = [
     layout: '/auth',
     path: 'sign-in', 
     icon: <Icon as={MdLock} width="20px" height="20px" color="inherit" />,
-    component: <SignInCentered />,
+    component: <SignIn />,
   },
 
   {
