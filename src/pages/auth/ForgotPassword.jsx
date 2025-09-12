@@ -13,30 +13,30 @@ import {
   Text,
   useColorModeValue,
   useToast,
-} from "@chakra-ui/react";
-import { FaChevronLeft } from "react-icons/fa";
-import DefaultAuth from "layouts/auth/Default";
-import illustration from "assets/img/auth/auth.jpeg";
+} from '@chakra-ui/react';
+import { FaChevronLeft } from 'react-icons/fa';
+import DefaultAuth from 'layouts/auth/Default';
+import illustration from 'assets/img/auth/auth.jpeg';
 // import api from "../../../services/api"; // when backend is ready
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [username, setUsername] = React.useState("");
-  const [userType, setUserType] = React.useState("Security Analyst");
-  const [err, setErr] = React.useState("");
+  const [username, setUsername] = React.useState('');
+  const [userType, setUserType] = React.useState('Security Analyst');
+  const [err, setErr] = React.useState('');
   const [loading, setLoading] = React.useState(false);
 
-  const textColor = useColorModeValue("navy.700", "white");
-  const textColorSecondary = "gray.400";
-  const brandStars = useColorModeValue("brand.500", "brand.400");
+  const textColor = useColorModeValue('navy.700', 'white');
+  const textColorSecondary = 'gray.400';
+  const brandStars = useColorModeValue('brand.500', 'brand.400');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErr("");
+    setErr('');
     if (!username) {
-      setErr("Username is required.");
+      setErr('Username is required.');
       return;
     }
     setLoading(true);
@@ -46,16 +46,16 @@ export default function ForgotPassword() {
       await new Promise((r) => setTimeout(r, 500));
 
       toast({
-        title: "Request submitted",
+        title: 'Request submitted',
         description:
-          "Your reset request has been recorded. A Platform Admin will review and configure your password.",
-        status: "success",
+          'Your reset request has been recorded. A Platform Admin will review and configure your password.',
+        status: 'success',
         duration: 4000,
         isClosable: true,
       });
-      navigate("/auth/sign-in", { replace: true });
+      navigate('/auth/sign-in', { replace: true });
     } catch (e) {
-      setErr("Failed to submit request. Please try again later.");
+      setErr('Failed to submit request. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -66,12 +66,18 @@ export default function ForgotPassword() {
       <NavLink to="/auth/sign-in">
         <Flex
           align="center"
-          ps={{ base: "10px", lg: "0px" }}
-          mt={{ base: "24px", md: "40px" }}
+          ps={{ base: '10px', lg: '0px' }}
+          mt={{ base: '24px', md: '40px' }}
           w="fit-content"
           mb="24px"
         >
-          <Icon as={FaChevronLeft} me="10px" h="14px" w="9px" color="secondaryGray.600" />
+          <Icon
+            as={FaChevronLeft}
+            me="10px"
+            h="14px"
+            w="9px"
+            color="secondaryGray.600"
+          />
           <Text fontSize="sm" color="secondaryGray.600">
             Back to Login
           </Text>
@@ -79,23 +85,29 @@ export default function ForgotPassword() {
       </NavLink>
 
       <Flex
-        maxW={{ base: "100%", md: "max-content" }}
+        maxW={{ base: '100%', md: 'max-content' }}
         w="100%"
-        mx={{ base: "auto", lg: "0px" }}
+        mx={{ base: 'auto', lg: '0px' }}
         me="auto"
         h="100%"
         alignItems="start"
         justifyContent="center"
-        mb={{ base: "30px", md: "60px" }}
-        px={{ base: "25px", md: "0px" }}
-        mt={{ base: "40px", md: "14vh" }}
+        mb={{ base: '30px', md: '60px' }}
+        px={{ base: '25px', md: '0px' }}
+        mt={{ base: '40px', md: '14vh' }}
         flexDirection="column"
       >
         <Box me="auto">
           <Heading color={textColor} fontSize="32px" mb="10px">
             Forgot Password
           </Heading>
-          <Text mb="24px" ms="4px" color={textColorSecondary} fontWeight="400" fontSize="md">
+          <Text
+            mb="24px"
+            ms="4px"
+            color={textColorSecondary}
+            fontWeight="400"
+            fontSize="md"
+          >
             Enter your username. A Platform Admin will reset/configure it.
           </Text>
         </Box>
@@ -103,26 +115,37 @@ export default function ForgotPassword() {
         <Flex
           zIndex="2"
           direction="column"
-          w={{ base: "100%", md: "420px" }}
+          w={{ base: '100%', md: '420px' }}
           maxW="100%"
           background="transparent"
           borderRadius="15px"
-          mx={{ base: "auto", lg: "unset" }}
+          mx={{ base: 'auto', lg: 'unset' }}
           me="auto"
-          mb={{ base: "20px", md: "auto" }}
+          mb={{ base: '20px', md: 'auto' }}
         >
           <form onSubmit={handleSubmit}>
             <FormControl>
               {/* Optional: User Type for context */}
-              <FormLabel ms="4px" fontSize="sm" fontWeight="500" color={textColor} display="flex">
+              <FormLabel
+                ms="4px"
+                fontSize="sm"
+                fontWeight="500"
+                color={textColor}
+                display="flex"
+              >
                 User Type
               </FormLabel>
               <Select
                 value={userType}
                 onChange={(e) => setUserType(e.target.value)}
-                mb="20px"
+                mb="24px"
                 size="lg"
+                fontSize="sm"
                 variant="auth"
+                color={textColor}
+                sx={{
+                  option: { color: textColor },
+                }}
               >
                 <option>Platform Admin</option>
                 <option>Network Admin</option>
@@ -150,6 +173,7 @@ export default function ForgotPassword() {
                 size="lg"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                autoComplete="off"
               />
 
               {err && (
