@@ -1,12 +1,6 @@
 import React from 'react';
 import { Icon } from '@chakra-ui/react';
-import {
-  MdBarChart,
-  MdPerson,
-  MdHome,
-  MdLock,
-  MdOutlineShoppingCart,
-} from 'react-icons/md';
+import { MdBarChart, MdPerson, MdHome, MdOutlineShoppingCart } from 'react-icons/md';
 
 // Admin Imports
 import MainDashboard from 'pages/admin/default';
@@ -15,11 +9,8 @@ import Profile from 'pages/admin/profile';
 import DataTables from 'pages/admin/dataTables';
 import RTL from 'pages/admin/rtl';
 
-// Auth Imports
-import SignIn from 'pages/auth/SignIn';
-import ForgotPassword from 'pages/auth/ForgotPassword';
 
-const routes = [
+const adminRoutes = [
   {
     name: 'Main Dashboard',
     layout: '/admin',
@@ -58,22 +49,6 @@ const routes = [
   },
 
   {
-    name: 'Sign In',
-    layout: '/auth',
-    path: 'sign-in', 
-    icon: <Icon as={MdLock} width="20px" height="20px" color="inherit" />,
-    component: <SignIn />,
-  },
-
-  {
-    name: 'Forgot Password',
-    layout: '/auth',
-    path: 'forgot-password',
-    icon: <Icon as={MdLock} width="20px" height="20px" color="inherit" />,
-    component: <ForgotPassword />,
-  },
-
-  {
     name: 'RTL Admin',
     layout: '/rtl',
     path: '/rtl-default',
@@ -82,4 +57,4 @@ const routes = [
   },
 ];
 
-export default routes;
+export default adminRoutes;

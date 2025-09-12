@@ -8,112 +8,90 @@ import { RtlProvider } from 'components/rtlProvider/RtlProvider.js';
 import { SidebarContext } from 'contexts/SidebarContext';
 import React, { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import routes from 'routes.js';
 
-// Custom Chakra theme
+// Reuse the admin route config for RTL demo
+import adminRoutes from 'routes/adminRoutes';
+
 export default function Dashboard(props) {
   const { ...rest } = props;
-  // states and functions
   const [fixed] = useState(false);
   const [toggleSidebar, setToggleSidebar] = useState(false);
-  // functions for changing the states from components
-  const getRoute = () => {
-    return window.location.pathname !== '/rtl/full-screen-maps';
-  };
-  const getActiveRoute = (routes) => {
+
+  const getRoute = () => window.location.pathname !== '/rtl/full-screen-maps';
+
+  const getActiveRoute = (routesArr) => {
     let activeRoute = 'Default Brand Text';
-    for (let i = 0; i < routes.length; i++) {
-      if (routes[i].collapse) {
-        let collapseActiveRoute = getActiveRoute(routes[i].items);
-        if (collapseActiveRoute !== activeRoute) {
-          return collapseActiveRoute;
-        }
-      } else if (routes[i].category) {
-        let categoryActiveRoute = getActiveRoute(routes[i].items);
-        if (categoryActiveRoute !== activeRoute) {
-          return categoryActiveRoute;
-        }
-      } else {
-        if (
-          window.location.href.indexOf(routes[i].layout + routes[i].path) !== -1
-        ) {
-          return routes[i].name;
-        }
+    for (let i = 0; i < routesArr.length; i++) {
+      if (routesArr[i].collapse) {
+        const r = getActiveRoute(routesArr[i].items);
+        if (r !== activeRoute) return r;
+      } else if (routesArr[i].category) {
+        const r = getActiveRoute(routesArr[i].items);
+        if (r !== activeRoute) return r;
+      } else if (
+        window.location.href.indexOf(routesArr[i].layout + routesArr[i].path) !== -1
+      ) {
+        return routesArr[i].name;
       }
     }
     return activeRoute;
   };
-  const getActiveNavbar = (routes) => {
+
+  const getActiveNavbar = (routesArr) => {
     let activeNavbar = false;
-    for (let i = 0; i < routes.length; i++) {
-      if (routes[i].collapse) {
-        let collapseActiveNavbar = getActiveNavbar(routes[i].items);
-        if (collapseActiveNavbar !== activeNavbar) {
-          return collapseActiveNavbar;
-        }
-      } else if (routes[i].category) {
-        let categoryActiveNavbar = getActiveNavbar(routes[i].items);
-        if (categoryActiveNavbar !== activeNavbar) {
-          return categoryActiveNavbar;
-        }
-      } else {
-        if (
-          window.location.href.indexOf(routes[i].layout + routes[i].path) !== -1
-        ) {
-          return routes[i].secondary;
-        }
+    for (let i = 0; i < routesArr.length; i++) {
+      if (routesArr[i].collapse) {
+        const r = getActiveNavbar(routesArr[i].items);
+        if (r !== activeNavbar) return r;
+      } else if (routesArr[i].category) {
+        const r = getActiveNavbar(routesArr[i].items);
+        if (r !== activeNavbar) return r;
+      } else if (
+        window.location.href.indexOf(routesArr[i].layout + routesArr[i].path) !== -1
+      ) {
+        return routesArr[i].secondary;
       }
     }
     return activeNavbar;
   };
-  const getActiveNavbarText = (routes) => {
+
+  const getActiveNavbarText = (routesArr) => {
     let activeNavbar = false;
-    for (let i = 0; i < routes.length; i++) {
-      if (routes[i].collapse) {
-        let collapseActiveNavbar = getActiveNavbarText(routes[i].items);
-        if (collapseActiveNavbar !== activeNavbar) {
-          return collapseActiveNavbar;
-        }
-      } else if (routes[i].category) {
-        let categoryActiveNavbar = getActiveNavbarText(routes[i].items);
-        if (categoryActiveNavbar !== activeNavbar) {
-          return categoryActiveNavbar;
-        }
-      } else {
-        if (
-          window.location.href.indexOf(routes[i].layout + routes[i].path) !== -1
-        ) {
-          return routes[i].messageNavbar;
-        }
+    for (let i = 0; i < routesArr.length; i++) {
+      if (routesArr[i].collapse) {
+        const r = getActiveNavbarText(routesArr[i].items);
+        if (r !== activeNavbar) return r;
+      } else if (routesArr[i].category) {
+        const r = getActiveNavbarText(routesArr[i].items);
+        if (r !== activeNavbar) return r;
+      } else if (
+        window.location.href.indexOf(routesArr[i].layout + routesArr[i].path) !== -1
+      ) {
+        return routesArr[i].messageNavbar;
       }
     }
     return activeNavbar;
   };
-  const getRoutes = (routes) => {
-    return routes.map((route, key) => {
-      if (route.layout === '/rtl') {
-        return (
-          <Route path={`${route.path}`} element={route.component} key={key} />
-        );
+
+  // Reuse admin routes inside RTL layout: accept '/admin' items
+  const getRoutes = (routesArr) =>
+    routesArr.map((route, key) => {
+      if (route.layout === '/admin') {
+        return <Route path={`${route.path}`} element={route.component} key={key} />;
       }
-      if (route.collapse) {
-        return getRoutes(route.items);
-      } else {
-        return null;
-      }
+      if (route.collapse) return getRoutes(route.items);
+      return null;
     });
-  };
+
   document.documentElement.dir = 'rtl';
   const { onOpen } = useDisclosure();
+
   return (
     <RtlProvider>
-      <SidebarContext.Provider
-        value={{
-          toggleSidebar,
-          setToggleSidebar,
-        }}
-      >
-        <Sidebar routes={routes} display="none" {...rest} />
+      <SidebarContext.Provider value={{ toggleSidebar, setToggleSidebar }}>
+        {/* Pass adminRoutes to the Sidebar */}
+        <Sidebar routes={adminRoutes} display="none" {...rest} />
+
         <Box
           float="left"
           minHeight="100vh"
@@ -133,9 +111,9 @@ export default function Dashboard(props) {
               <Navbar
                 onOpen={onOpen}
                 logoText={'Horizon UI Dashboard'}
-                brandText={getActiveRoute(routes)}
-                secondary={getActiveNavbar(routes)}
-                message={getActiveNavbarText(routes)}
+                brandText={getActiveRoute(adminRoutes)}
+                secondary={getActiveNavbar(adminRoutes)}
+                message={getActiveNavbarText(adminRoutes)}
                 fixed={fixed}
                 {...rest}
               />
@@ -143,22 +121,15 @@ export default function Dashboard(props) {
           </Portal>
 
           {getRoute() ? (
-            <Box
-              mx="auto"
-              p={{ base: '20px', md: '30px' }}
-              pe="20px"
-              minH="100vh"
-              pt="50px"
-            >
+            <Box mx="auto" p={{ base: '20px', md: '30px' }} pe="20px" minH="100vh" pt="50px">
               <Routes>
-                {getRoutes(routes)}
-                <Route
-                  path="/"
-                  element={<Navigate to="/rtl/default" replace />}
-                />
+                {getRoutes(adminRoutes)}
+                {/* If someone hits /rtl directly, just bounce them to the admin default */}
+                <Route path="/" element={<Navigate to="/admin/default" replace />} />
               </Routes>
             </Box>
           ) : null}
+
           <Box>
             <Footer />
           </Box>

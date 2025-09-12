@@ -37,12 +37,6 @@ function SignIn() {
   const [password, setPassword] = React.useState('');
   const [err, setErr] = React.useState('');
 
-  const roleMap = {
-    'Platform Admin': 'platform_admin',
-    'Network Admin': 'network_admin',
-    'Security Analyst': 'security_analyst',
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr('');
@@ -51,17 +45,28 @@ function SignIn() {
       return;
     }
 
+    // Map dropdown → internal role + landing path
+    const roleMap = {
+      'Platform Admin': { role: 'platform_admin', home: '/platform-admin' },
+      'Network Admin':  { role: 'network_admin',  home: '/admin' },       // update later
+      'Security Analyst': { role: 'security_analyst', home: '/admin' },   // update later
+    };
+
+    const mapped = roleMap[userType];
+
     // TODO: Replace with real API call
     const token = 'demo-token';
     const user = {
       id: 'u1',
       username,
       email: `${username}@example.com`,
-      role: roleMap[userType],
+      role: mapped.role,
       displayRole: userType,
     };
+
+    // Save auth + route strictly by dropdown selection
     login(token, user);
-    navigate(location.state?.from?.pathname || '/admin', { replace: true });
+    navigate(mapped.home, { replace: true });
   };
 
   // Chakra colors

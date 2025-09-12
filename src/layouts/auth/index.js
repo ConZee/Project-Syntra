@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
-import routes from 'routes.js';
+import { Routes, Route, Navigate } from 'react-router-dom';
+
+// Auth imports
+import ForgotPassword from 'pages/auth/ForgotPassword';
+import SignIn from 'pages/auth/SignIn';
 
 // Chakra imports
 import { Box, useColorModeValue } from '@chakra-ui/react';
@@ -10,34 +13,11 @@ import { SidebarContext } from 'contexts/SidebarContext';
 
 export default function Auth() {
   const [toggleSidebar, setToggleSidebar] = useState(false);
-
-  const getRoute = () => {
-    return window.location.pathname !== '/auth/full-screen-maps';
-  };
-
-  const getRoutes = (routes) => {
-    return routes.map((route, key) => {
-      if (route.layout === '/auth') {
-        return <Route path={`${route.path}`} element={route.component} key={key} />;
-      }
-      if (route.collapse) {
-        return getRoutes(route.items);
-      }
-      return null;
-    });
-  };
-
   const authBg = useColorModeValue('white', 'navy.900');
-  document.documentElement.dir = 'ltr';
 
   return (
     <Box>
-      <SidebarContext.Provider
-        value={{
-          toggleSidebar,
-          setToggleSidebar,
-        }}
-      >
+      <SidebarContext.Provider value={{ toggleSidebar, setToggleSidebar }}>
         <Box
           bg={authBg}
           float="right"
@@ -50,14 +30,11 @@ export default function Auth() {
           transitionProperty="top, bottom, width"
           transitionTimingFunction="linear, linear, ease"
         >
-          {getRoute() ? (
-            <Box mx="auto" minH="100vh">
-              <Routes>
-                {getRoutes(routes)}
-                <Route path="/" element={<Navigate to="/auth/sign-in" replace />} />
-              </Routes>
-            </Box>
-          ) : null}
+          <Routes>
+            <Route path="sign-in" element={<SignIn />} />
+            <Route path="forgot-password" element={<ForgotPassword />} />
+            <Route path="/" element={<Navigate to="/auth/sign-in" replace />} />
+          </Routes>
         </Box>
       </SidebarContext.Provider>
     </Box>

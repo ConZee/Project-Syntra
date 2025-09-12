@@ -8,6 +8,7 @@ import initialTheme from './theme/theme';
 import { useState } from 'react';
 import { AuthProvider } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
+import PlatformDashboard from './pages/platformAdmin/Dashboard';
 
 export default function Main() {
   const [currentTheme, setCurrentTheme] = useState(initialTheme);
@@ -29,6 +30,10 @@ export default function Main() {
               path="rtl/*"
               element={<RTLLayout theme={currentTheme} setTheme={setCurrentTheme} />}
             />
+            <Route element={<ProtectedRoute roles={['platform_admin']} />}>
+              <Route path="platform-admin/*" element={<PlatformDashboard />} />
+            </Route>
+
           </Route>
 
           {/* Redirect helpers */}
