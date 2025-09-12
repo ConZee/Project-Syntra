@@ -6,8 +6,6 @@ import RTLLayout from './layouts/rtl';
 import { ChakraProvider } from '@chakra-ui/react';
 import initialTheme from './theme/theme';
 import { useState } from 'react';
-
-// ✅ new imports
 import { AuthProvider } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 
@@ -16,13 +14,12 @@ export default function Main() {
 
   return (
     <ChakraProvider theme={currentTheme}>
-      {/* ✅ Auth state provider */}
       <AuthProvider>
         <Routes>
-          {/* Public auth pages (login, register, etc.) */}
+          {/* Public auth pages */}
           <Route path="auth/*" element={<AuthLayout />} />
 
-          {/* ✅ Protected routes */}
+          {/* Protected sections */}
           <Route element={<ProtectedRoute />}>
             <Route
               path="admin/*"
@@ -34,7 +31,7 @@ export default function Main() {
             />
           </Route>
 
-          {/* Default redirect – still points to /admin, which is now protected */}
+          {/* Default redirect to admin (now gated) */}
           <Route path="/" element={<Navigate to="/admin" replace />} />
         </Routes>
       </AuthProvider>
