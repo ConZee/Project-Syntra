@@ -179,27 +179,16 @@ function SignIn() {
                 Sign In
               </Button>
 
-              <Flex justifyContent="space-between" align="center" mt="8px">
+              <Flex justify="center" align="center" mt="8px" w="100%">
                 <NavLink to="/auth/forgot-password">
                   <Text color={textColorBrand} fontSize="sm" fontWeight="500">
                     Forgot password?
-                  </Text>
-                </NavLink>
-
-                <NavLink to="/auth/sign-up">
-                  <Text color={textColorBrand} fontSize="sm" fontWeight="500">
-                    Create an Account
                   </Text>
                 </NavLink>
               </Flex>
             </FormControl>
           </form>
 
-          <Flex flexDirection="column" justifyContent="center" alignItems="start" maxW="100%" mt="16px">
-            <Text color={textColorDetails} fontWeight="400" fontSize="14px">
-              Your access is role-based. Contact a Platform Admin if you need help.
-            </Text>
-          </Flex>
         </Flex>
       </Flex>
     </DefaultAuth>
