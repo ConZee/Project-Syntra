@@ -18,7 +18,6 @@ export default function Auth() {
   const getRoutes = (routes) => {
     return routes.map((route, key) => {
       if (route.layout === '/auth') {
-        // NOTE: route.path must be RELATIVE (e.g., "sign-in"), not "/sign-in"
         return <Route path={`${route.path}`} element={route.component} key={key} />;
       }
       if (route.collapse) {

@@ -1,4 +1,3 @@
-/* eslint-disable */
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -17,7 +16,7 @@ import {
 } from "@chakra-ui/react";
 import { FaChevronLeft } from "react-icons/fa";
 import DefaultAuth from "layouts/auth/Default";
-import illustration from "assets/img/auth/auth.png";
+import illustration from "assets/img/auth/auth.jpeg";
 // import api from "../../../services/api"; // when backend is ready
 
 export default function ForgotPassword() {

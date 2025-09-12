@@ -1,8 +1,6 @@
-/* eslint-disable */
 import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext'; // adjust if needed
-
+import { useAuth } from '../../auth/AuthContext'; 
 import {
   Box,
   Button,
@@ -19,7 +17,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import DefaultAuth from 'layouts/auth/Default';
-import illustration from 'assets/img/auth/auth.png';
+import illustration from 'assets/img/auth/auth.jpeg';
 import { MdOutlineRemoveRedEye } from 'react-icons/md';
 import { RiEyeCloseLine } from 'react-icons/ri';
 
