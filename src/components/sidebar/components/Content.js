@@ -17,7 +17,6 @@ function SidebarContent(props) {
       <Profile name={userName} avatarUrl={avatarUrl} />
       <Stack direction='column' mb='auto' mt='8px'>
         <Box ps='20px' pe={{ md: "16px", "2xl": "1px" }}>
-          <Box color="gray.400" fontSize="xs">routes: {Array.isArray(routes) ? routes.length : 'none'}</Box>
           <Links routes={routes} />
         </Box>
       </Stack>

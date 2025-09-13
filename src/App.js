@@ -8,13 +8,16 @@ import { useState } from 'react';
 import { AuthProvider } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 
-// DASHBOARDS / PAGES YOU ALREADY HAVE
-import PlatformDashboard from './pages/platformAdmin/Dashboard';
+// Platform Admin layout + pages
+import PlatformAdminLayout from './pages/platformAdmin/Dashboard';
+import DashboardHome from './pages/platformAdmin/DashboardHome';
+import UserAccounts from './pages/platformAdmin/UserAccounts';
+import ProfileType from './pages/platformAdmin/ProfileType';
+import Alerts from './pages/platformAdmin/Alerts';
 
 export default function Main() {
   const [currentTheme, setCurrentTheme] = useState(initialTheme);
 
-  // Optional: send logged-in users to their last base; otherwise to sign-in
   const raw = localStorage.getItem('syntra_user');
   const user = raw ? JSON.parse(raw) : null;
   const defaultHome = user ? `${user.base || '/platform-admin'}/dashboard` : '/auth/sign-in';
@@ -26,21 +29,25 @@ export default function Main() {
           {/* Public auth pages */}
           <Route path="auth/*" element={<AuthLayout />} />
 
-          {/* Protected sections (token-only check inside ProtectedRoute) */}
+          {/* Protected sections */}
           <Route element={<ProtectedRoute />}>
-            {/* Your existing Horizon admin area stays as-is */}
+            {/* Horizon original admin area */}
             <Route
               path="admin/*"
               element={<AdminLayout theme={currentTheme} setTheme={setCurrentTheme} />}
             />
 
-            {/* PROTOTYPE ROLE: URL prefix drives the “role”.
-               Remove the roles prop to avoid /auth/forbidden on platform-admin. */}
-            <Route path="platform-admin/dashboard" element={<PlatformDashboard />} />
-            <Route path="platform-admin" element={<Navigate to="/platform-admin/dashboard" replace />} />
+            {/* Platform Admin layout with nested pages */}
+            <Route path="platform-admin" element={<PlatformAdminLayout />}>
+              <Route index element={<DashboardHome />} />
+              <Route path="dashboard" element={<DashboardHome />} />
+              <Route path="users" element={<UserAccounts />} />
+              <Route path="profile-type" element={<ProfileType />} />
+              <Route path="alerts" element={<Alerts />} />
+            </Route>
 
             {/*
-              When you add other profiles, register their dashboards similarly:
+              After adding other profiles, register their dashboards similarly:
               <Route path="network-admin/dashboard" element={<NetworkDashboard />} />
               <Route path="network-admin" element={<Navigate to="/network-admin/dashboard" replace />} />
               <Route path="security-analyst/dashboard" element={<SecurityAnalystDashboard />} />
@@ -49,7 +56,6 @@ export default function Main() {
           </Route>
 
           {/* Redirect helpers */}
-          <Route path="login" element={<Navigate to="/auth/sign-in" replace />} />
           <Route path="/" element={<Navigate to={defaultHome} replace />} />
           <Route path="*" element={<Navigate to={defaultHome} replace />} />
         </Routes>
