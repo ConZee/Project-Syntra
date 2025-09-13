@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -17,22 +17,23 @@ import {
   Tr,
   Text,
   useToast,
-} from "@chakra-ui/react";
-import { FiSearch, FiEdit2, FiTrash2, FiEye, FiPlus } from "react-icons/fi";
+  useColorModeValue,
+} from '@chakra-ui/react';
+import { FiSearch, FiEdit2, FiTrash2, FiEye, FiPlus } from 'react-icons/fi';
 
 // Demo data — swap with API later
 const INITIAL = [
-  { id: "pt-plat-admin",   name: "Platform Administrator", status: "Active" },
-  { id: "pt-net-admin",    name: "Network Administrator",  status: "Active" },
-  { id: "pt-sec-analyst",  name: "Security Analyst",       status: "Active" },
+  { id: 'pt-plat-admin', name: 'Platform Administrator', status: 'Active' },
+  { id: 'pt-net-admin', name: 'Network Administrator', status: 'Active' },
+  { id: 'pt-sec-analyst', name: 'Security Analyst', status: 'Active' },
 ];
 
-const statusColor = (s) => ({ Active: "green", Inactive: "gray" }[s] || "gray");
+const statusColor = (s) => ({ Active: 'green', Inactive: 'gray' }[s] || 'gray');
 
 export default function ProfileTypes() {
   const [rows, setRows] = useState(INITIAL);
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState(""); // "", "Active", "Inactive"
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState(''); // "", "Active", "Inactive"
   const toast = useToast();
 
   const filtered = useMemo(() => {
@@ -49,23 +50,23 @@ export default function ProfileTypes() {
     const next = {
       id: `pt-${Date.now()}`,
       name: `New Profile ${rows.length + 1}`,
-      status: "Active",
+      status: 'Active',
     };
     setRows((prev) => [next, ...prev]);
-    toast({ title: "Profile added", status: "success", duration: 1500 });
+    toast({ title: 'Profile added', status: 'success', duration: 1500 });
   };
 
   const onView = (r) =>
-    toast({ title: `Viewing "${r.name}"`, status: "info", duration: 1200 });
+    toast({ title: `Viewing "${r.name}"`, status: 'info', duration: 1200 });
 
   const onEdit = (r) =>
-    toast({ title: `Editing "${r.name}"`, status: "info", duration: 1200 });
+    toast({ title: `Editing "${r.name}"`, status: 'info', duration: 1200 });
 
   const onDelete = (r) => {
     setRows((prev) => prev.filter((x) => x.id !== r.id));
-    toast({ title: `Deleted "${r.name}"`, status: "success", duration: 1500 });
+    toast({ title: `Deleted "${r.name}"`, status: 'success', duration: 1500 });
   };
-
+  const textColor = useColorModeValue('navy.700', 'white');
   return (
     <Box>
       {/* Title row (optional—Navbar already shows section name) */}
@@ -90,6 +91,8 @@ export default function ProfileTypes() {
           value={status}
           onChange={(e) => setStatus(e.target.value)}
           placeholder="Profile Status"
+          color={textColor}
+          sx={{ option: { color: textColor } }}
         >
           <option>Active</option>
           <option>Inactive</option>
@@ -156,7 +159,9 @@ export default function ProfileTypes() {
 
       {/* Footer hint (stub for pagination, if you add it later) */}
       <Flex mt={3} justify="space-between" color="gray.500" fontSize="sm">
-        <Text>Rows: {filtered.length} / {rows.length}</Text>
+        <Text>
+          Rows: {filtered.length} / {rows.length}
+        </Text>
         <Text>Pagination coming soon</Text>
       </Flex>
     </Box>

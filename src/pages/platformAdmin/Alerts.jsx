@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -20,7 +20,7 @@ import {
   Text,
   useToast,
   useColorModeValue,
-} from "@chakra-ui/react";
+} from '@chakra-ui/react';
 import {
   FiSearch,
   FiRefreshCw,
@@ -28,19 +28,19 @@ import {
   FiCheckCircle,
   FiX,
   FiTrash2,
-} from "react-icons/fi";
+} from 'react-icons/fi';
 
-const STORAGE_KEY = "syntra_reset_requests";
+const STORAGE_KEY = 'syntra_reset_requests';
 // minutes until a reset token expires (for demo)
 const TOKEN_TTL_MIN = 15;
 
 const statusColor = (s) =>
   ({
-    Pending: "orange",
-    "Link Sent": "blue",
-    Completed: "green",
-    Denied: "red",
-  }[s] || "gray");
+    Pending: 'orange',
+    'Link Sent': 'blue',
+    Completed: 'green',
+    Denied: 'red',
+  }[s] || 'gray');
 
 // --- tiny storage helpers ---
 const loadFromStorage = () => {
@@ -57,18 +57,21 @@ const saveToStorage = (list) => {
   } catch {}
 };
 
-const formatDate = (ts) =>
-  ts ? new Date(ts).toLocaleString() : "—";
+const formatDate = (ts) => (ts ? new Date(ts).toLocaleString() : '—');
 
 const computeExpiry = (createdAt, ttlMin = TOKEN_TTL_MIN) => {
   if (!createdAt) return null;
   return createdAt + ttlMin * 60 * 1000;
 };
 const expiryLabel = (req) => {
-  if (!req.createdAt || (req.status !== "Pending" && req.status !== "Link Sent")) return "—";
+  if (
+    !req.createdAt ||
+    (req.status !== 'Pending' && req.status !== 'Link Sent')
+  )
+    return '—';
   const exp = computeExpiry(req.createdAt);
   const ms = exp - Date.now();
-  if (ms <= 0) return "Expired";
+  if (ms <= 0) return 'Expired';
   const min = Math.ceil(ms / 60000);
   return `in ${min} min`;
 };
@@ -79,27 +82,27 @@ const seedIfEmpty = () => {
   const seeded = [
     {
       id: `${now - 10000}`,
-      email: "john.smith@gmail.com",
-      method: "email",
+      email: 'john.smith@gmail.com',
+      method: 'email',
       createdAt: now - 5 * 60 * 1000, // 5 min ago
-      status: "Pending",
-      ip: "203.0.113.10",
+      status: 'Pending',
+      ip: '203.0.113.10',
     },
     {
       id: `${now - 20000}`,
-      email: "ollyben@gmail.com",
-      method: "email",
+      email: 'ollyben@gmail.com',
+      method: 'email',
       createdAt: now - 40 * 60 * 1000, // 40 min ago
-      status: "Link Sent",
-      ip: "198.51.100.25",
+      status: 'Link Sent',
+      ip: '198.51.100.25',
     },
     {
       id: `${now - 30000}`,
-      email: "dwarren3@gmail.com",
-      method: "email",
+      email: 'dwarren3@gmail.com',
+      method: 'email',
       createdAt: now - 2 * 24 * 60 * 60 * 1000, // 2 days ago
-      status: "Completed",
-      ip: "192.0.2.44",
+      status: 'Completed',
+      ip: '192.0.2.44',
     },
   ];
   saveToStorage(seeded);
@@ -109,12 +112,12 @@ const seedIfEmpty = () => {
 export default function Alerts() {
   const toast = useToast();
   const [rows, setRows] = useState([]);
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState(""); // "", Pending, Link Sent, Completed, Denied
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState(''); // "", Pending, Link Sent, Completed, Denied
   const [selected, setSelected] = useState(new Set());
 
-  const cardBg = useColorModeValue("white", "navy.800");
-  const border = useColorModeValue("gray.200", "whiteAlpha.200");
+  const cardBg = useColorModeValue('white', 'navy.800');
+  const border = useColorModeValue('gray.200', 'whiteAlpha.200');
 
   useEffect(() => {
     let list = loadFromStorage();
@@ -125,7 +128,7 @@ export default function Alerts() {
   const refresh = () => {
     setRows(loadFromStorage());
     setSelected(new Set());
-    toast({ title: "Refreshed", status: "info", duration: 900 });
+    toast({ title: 'Refreshed', status: 'info', duration: 900 });
   };
 
   const persist = (next) => {
@@ -190,14 +193,18 @@ export default function Alerts() {
       ids.includes(r.id)
         ? {
             ...r,
-            status: "Link Sent",
+            status: 'Link Sent',
             // keep createdAt as request time; expiry is derived
             lastActionAt: now,
           }
-        : r
+        : r,
     );
     persist(next);
-    toast({ title: `Sent ${ids.length} reset link(s)`, status: "success", duration: 1200 });
+    toast({
+      title: `Sent ${ids.length} reset link(s)`,
+      status: 'success',
+      duration: 1200,
+    });
     setSelected(new Set());
   };
 
@@ -205,10 +212,14 @@ export default function Alerts() {
     if (!ids.length) return;
     const now = Date.now();
     const next = rows.map((r) =>
-      ids.includes(r.id) ? { ...r, status: "Completed", lastActionAt: now } : r
+      ids.includes(r.id) ? { ...r, status: 'Completed', lastActionAt: now } : r,
     );
     persist(next);
-    toast({ title: `Marked ${ids.length} as completed`, status: "success", duration: 1200 });
+    toast({
+      title: `Marked ${ids.length} as completed`,
+      status: 'success',
+      duration: 1200,
+    });
     setSelected(new Set());
   };
 
@@ -216,10 +227,14 @@ export default function Alerts() {
     if (!ids.length) return;
     const now = Date.now();
     const next = rows.map((r) =>
-      ids.includes(r.id) ? { ...r, status: "Denied", lastActionAt: now } : r
+      ids.includes(r.id) ? { ...r, status: 'Denied', lastActionAt: now } : r,
     );
     persist(next);
-    toast({ title: `Denied ${ids.length} request(s)`, status: "info", duration: 1200 });
+    toast({
+      title: `Denied ${ids.length} request(s)`,
+      status: 'info',
+      duration: 1200,
+    });
     setSelected(new Set());
   };
 
@@ -227,16 +242,30 @@ export default function Alerts() {
     if (!ids.length) return;
     const next = rows.filter((r) => !ids.includes(r.id));
     persist(next);
-    toast({ title: `Removed ${ids.length} record(s)`, status: "warning", duration: 1200 });
+    toast({
+      title: `Removed ${ids.length} record(s)`,
+      status: 'warning',
+      duration: 1200,
+    });
     setSelected(new Set());
   };
 
   // Bulk helpers
-  const selectedIds = Array.from(selected).filter((id) => allVisibleIds.includes(id));
+  const selectedIds = Array.from(selected).filter((id) =>
+    allVisibleIds.includes(id),
+  );
   const bulkDisabled = selectedIds.length === 0;
 
+  const textColor = useColorModeValue('navy.700', 'white');
+
   return (
-    <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="16px" p={4}>
+    <Box
+      bg={cardBg}
+      borderWidth="1px"
+      borderColor={border}
+      borderRadius="16px"
+      p={4}
+    >
       <Text fontSize="2xl" fontWeight="bold" mb={1}>
         Password Reset Requests
       </Text>
@@ -262,6 +291,8 @@ export default function Alerts() {
           placeholder="All statuses"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
+          color={textColor}
+          sx={{ option: { color: textColor } }}
         >
           <option>Pending</option>
           <option>Link Sent</option>
@@ -349,7 +380,7 @@ export default function Alerts() {
                 <Badge colorScheme={statusColor(r.status)}>{r.status}</Badge>
               </Td>
               <Td>{expiryLabel(r)}</Td>
-              <Td>{r.ip || "—"}</Td>
+              <Td>{r.ip || '—'}</Td>
               <Td isNumeric>
                 <HStack justify="flex-end" spacing={1}>
                   <IconButton
