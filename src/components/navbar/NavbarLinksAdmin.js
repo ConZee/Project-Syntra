@@ -3,8 +3,6 @@ import {
   Button,
   Flex,
   Icon,
-  Image,
-  Link,
   Menu,
   MenuButton,
   MenuItem,
@@ -21,10 +19,9 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 
-import { MdNotificationsNone, MdInfoOutline } from 'react-icons/md';
+import { MdNotificationsNone } from 'react-icons/md';
 import { IoMdMoon, IoMdSunny } from 'react-icons/io';
 import { FaEthereum } from 'react-icons/fa';
-import adminRoutes from 'routes/adminRoutes';
 
 export default function HeaderLinks(props) {
   const { secondary } = props;
@@ -98,8 +95,6 @@ export default function HeaderLinks(props) {
           <Text as="span" display={{ base: 'none', md: 'unset' }}>{' '}ETH</Text>
         </Text>
       </Flex>
-
-      <SidebarResponsive routes={adminRoutes} />
 
       {/* Notifications menu */}
       <Menu autoSelect={false}>
