@@ -1,6 +1,6 @@
 import React from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext'; 
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthContext';
 import {
   Box,
   Button,
@@ -29,7 +29,6 @@ function SignIn() {
   // Auth + routing
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Form state
   const [userType, setUserType] = React.useState('Platform Admin');
@@ -37,36 +36,54 @@ function SignIn() {
   const [password, setPassword] = React.useState('');
   const [err, setErr] = React.useState('');
 
-  const handleSubmit = async (e) => {
+  // Frontend-only demo accounts (prototype)
+  // username/password must match the selected profile's base below
+  const DEMO = [
+    { username: 'pa', password: 'pa123', base: '/platform-admin',  name: 'Platform Admin',   avatarUrl: '' },
+    { username: 'na', password: 'na123', base: '/network-admin',   name: 'Network Admin',    avatarUrl: '' },
+    { username: 'sa', password: 'sa123', base: '/security-analyst',name: 'Security Analyst', avatarUrl: '' },
+  ];
+
+  // Map dropdown label → base path (URL prefix drives role)
+  const baseFor = (label) => {
+    switch (label) {
+      case 'Platform Admin':  return '/platform-admin';
+      case 'Network Admin':   return '/network-admin';
+      case 'Security Analyst':return '/security-analyst';
+      default:                return '/platform-admin';
+    }
+  };
+
+  const handleSubmit = (e) => {
     e.preventDefault();
     setErr('');
+
     if (!userType || !username || !password) {
       setErr('Please fill in all fields.');
       return;
     }
 
-    // Map dropdown → internal role + landing path
-    const roleMap = {
-      'Platform Admin': { role: 'platform_admin', home: '/platform-admin' },
-      'Network Admin':  { role: 'network_admin',  home: '/admin' },       // update later
-      'Security Analyst': { role: 'security_analyst', home: '/admin' },   // update later
-    };
+    const base = baseFor(userType);
+    const match = DEMO.find(
+      (u) => u.username === username && u.password === password && u.base === base
+    );
 
-    const mapped = roleMap[userType];
+    if (!match) {
+      setErr('Invalid credentials or profile type.');
+      return;
+    }
 
-    // TODO: Replace with real API call
-    const token = 'demo-token';
-    const user = {
-      id: 'u1',
-      username,
-      email: `${username}@example.com`,
-      role: mapped.role,
-      displayRole: userType,
-    };
+    // Minimal user object for UI (profile/avatar/sidebar)
+    const { password: _drop, ...user } = match; // strip pw
 
-    // Save auth + route strictly by dropdown selection
-    login(token, user);
-    navigate(mapped.home, { replace: true });
+    // Persist for refreshes / sidebar profile
+    localStorage.setItem('syntra_user', JSON.stringify(user));
+
+    // If your AuthContext wants a token+user, feed it a demo token
+    login?.('demo-token', user);
+
+    // Frontend redirect to the role's dashboard
+    navigate(`${user.base}/dashboard`, { replace: true });
   };
 
   // Chakra colors
@@ -138,9 +155,7 @@ function SignIn() {
                 fontSize="sm"
                 variant="auth"
                 color={textColor}
-                sx={{
-                  option: { color: textColor },
-                }}
+                sx={{ option: { color: textColor } }}
               >
                 <option>Platform Admin</option>
                 <option>Network Admin</option>

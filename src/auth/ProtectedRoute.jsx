@@ -1,17 +1,17 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 
-export default function ProtectedRoute({ roles }) {
-  const { isAuthenticated, user } = useAuth();
+export default function ProtectedRoute(/* { roles } */) {
+  const { isAuthenticated } = useAuth();        // ✅ hook at top level
   const loc = useLocation();
 
-  if (!isAuthenticated) {
+  const token = localStorage.getItem("token");  // fallback on refresh
+  const authed = Boolean(isAuthenticated || token);
+
+  if (!authed) {
     return <Navigate to="/auth/sign-in" replace state={{ from: loc }} />;
   }
 
-  if (roles && user && !roles.includes(user.role ?? "")) {
-    return <Navigate to="/auth/forbidden" replace />;
-  }
-
+  // Roles check intentionally disabled for prototype.
   return <Outlet />;
 }
