@@ -91,7 +91,6 @@ function SignIn() {
   const textColorSecondary = 'gray.400';
   const textColorBrand = useColorModeValue('brand.500', 'white');
   const brandStars = useColorModeValue('brand.500', 'brand.400');
-  const textColorDetails = useColorModeValue('navy.700', 'secondaryGray.600');
 
   return (
     <DefaultAuth illustrationBackground={illustration} image={illustration}>

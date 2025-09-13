@@ -12,7 +12,7 @@ import ProtectedRoute from './auth/ProtectedRoute';
 import PlatformAdminLayout from './pages/platformAdmin/Dashboard';
 import DashboardHome from './pages/platformAdmin/DashboardHome';
 import UserAccounts from './pages/platformAdmin/UserAccounts';
-import ProfileType from './pages/platformAdmin/ProfileType';
+import ProfileTypes from './pages/platformAdmin/ProfileTypes';
 import Alerts from './pages/platformAdmin/Alerts';
 
 export default function Main() {
@@ -42,7 +42,7 @@ export default function Main() {
               <Route index element={<DashboardHome />} />
               <Route path="dashboard" element={<DashboardHome />} />
               <Route path="users" element={<UserAccounts />} />
-              <Route path="profile-type" element={<ProfileType />} />
+              <Route path="profile-types" element={<ProfileTypes />} />
               <Route path="alerts" element={<Alerts />} />
             </Route>
 
