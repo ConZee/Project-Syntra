@@ -17,7 +17,7 @@ const platformAdminRoutes = [
   {
     name: "Profile Types",
     layout: "/platform-admin",
-    path: "/profiles",  
+    path: "/profile-types",  
     icon: <FiSettings />,
   },
   {
