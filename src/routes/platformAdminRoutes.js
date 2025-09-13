@@ -1,16 +1,32 @@
 import React from "react";
 import { Icon } from "@chakra-ui/react";
-import { MdHome } from "react-icons/md";
+import { FiHome, FiUsers, FiSettings } from "react-icons/fi";
 
-import PlatformDashboard from "pages/platformAdmin/Dashboard";
+import Dashboard from "pages/platformAdmin/Dashboard";
+import Users from "pages/platformAdmin/Users";
+import Settings from "pages/platformAdmin/Settings";
 
 const platformAdminRoutes = [
   {
-    name: "Dashboard",
+    name: "Overview",
     layout: "/platform-admin",
-    path: "/",
-    icon: <Icon as={MdHome} w="20px" h="20px" color="inherit" />,
-    component: <PlatformDashboard />,
+    path: "/dashboard",                 // full URL => /platform-admin/dashboard
+    icon: <Icon as={FiHome} />,
+    element: <Dashboard />,
+  },
+  {
+    name: "Users",
+    layout: "/platform-admin",
+    path: "/users",                     // /platform-admin/users
+    icon: <Icon as={FiUsers} />,
+    element: <Users />,
+  },
+  {
+    name: "Settings",
+    layout: "/platform-admin",
+    path: "/settings",                  // /platform-admin/settings
+    icon: <Icon as={FiSettings} />,
+    element: <Settings />,
   },
 ];
 
