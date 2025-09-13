@@ -19,13 +19,14 @@ export default function PlatformDashboard() {
       <Sidebar routes={platformAdminRoutes} />
 
       {/* Main content area */}
-      <Flex direction="column" flex="1">
+      <Flex direction="column" flex="1" 
+            ms={{ base: 0, xl: "300px" }}   // reserve space for the fixed sidebar 
+            pt={{ base: "80px", xl: "88px" }} // push below the top bar/navbar
+            px={{ base: 4, md: 6 }}          // side padding for breathing room
+            as="main" position="relative">
+
         {/* Top bar */}
-        <Navbar
-          brandText="Platform Admin"
-          secondary={false}
-          onOpen={() => {}}
-        />
+        <Navbar brandText="Platform Admin" secondary={false} onOpen={() => {}} />
 
         {/* Page body */}
         <Box p={6}>
