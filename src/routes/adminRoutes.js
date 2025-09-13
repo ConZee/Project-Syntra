@@ -7,7 +7,6 @@ import MainDashboard from 'pages/admin/default';
 import NFTMarketplace from 'pages/admin/marketplace';
 import Profile from 'pages/admin/profile';
 import DataTables from 'pages/admin/dataTables';
-import RTL from 'pages/admin/rtl';
 
 
 const adminRoutes = [
@@ -46,14 +45,6 @@ const adminRoutes = [
     path: '/profile',
     icon: <Icon as={MdPerson} width="20px" height="20px" color="inherit" />,
     component: <Profile />,
-  },
-
-  {
-    name: 'RTL Admin',
-    layout: '/rtl',
-    path: '/rtl-default',
-    icon: <Icon as={MdHome} width="20px" height="20px" color="inherit" />,
-    component: <RTL />,
   },
 ];
 

@@ -16,8 +16,7 @@ export default function PlatformDashboard() {
   return (
     <Flex minH="100vh" bg={bgColor}>
       {/* Sidebar */}
-      <Sidebar variant="platformAdmin" />
-      <Sidebar routes={platformAdminRoutes} variant="platformAdmin" />
+      <Sidebar routes={platformAdminRoutes} />
 
       {/* Main content area */}
       <Flex direction="column" flex="1">

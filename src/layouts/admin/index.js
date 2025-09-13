@@ -7,7 +7,7 @@ import Sidebar from 'components/sidebar/Sidebar.js';
 import { SidebarContext } from 'contexts/SidebarContext';
 import React, { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import adminRoutes from 'routes/adminRoutes.js';
+import adminRoutes from 'routes/adminRoutes';
 
 // Custom Chakra theme
 export default function Dashboard(props) {
