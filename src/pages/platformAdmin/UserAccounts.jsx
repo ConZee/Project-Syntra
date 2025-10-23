@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -30,6 +30,12 @@ import {
   ModalBody,
   ModalFooter,
   Spinner,
+  AlertDialog,
+  AlertDialogOverlay,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogBody,
+  AlertDialogFooter,
 } from '@chakra-ui/react';
 import { FiSearch, FiEdit2, FiTrash2, FiEye } from 'react-icons/fi';
 
@@ -49,16 +55,43 @@ export default function UserAccounts() {
   const textColorBrand = useColorModeValue('brand.500', 'brand.400');
   const cardBg = useColorModeValue('white', 'navy.800');
   const borderColor = useColorModeValue('gray.200', 'whiteAlpha.200');
+  const hoverBg = useColorModeValue('gray.200', 'whiteAlpha.200');
 
   const toast = useToast();
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen, onOpen, onClose } = useDisclosure(); // Add modal
+  const viewDisclosure = useDisclosure(); // View modal
+  const editDisclosure = useDisclosure(); // Edit modal
+
+  // NEW: delete confirmations (two-step)
+  const deleteStep1 = useDisclosure();
+  const deleteStep2 = useDisclosure();
+  const cancelRef1 = useRef();
+  const cancelRef2 = useRef();
 
   // ===== Table state =====
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  // ===== Form state =====
+  // ===== Filters (Role & Status) =====
+  const [filterRole, setFilterRole] = useState(''); // '' = show all roles
+  const [filterStatus, setFilterStatus] = useState(''); // '' = show all statuses
+
+  // ===== Filtered rows based on dropdown selections =====
+  const filteredRows = useMemo(() => {
+    return rows.filter((user) => {
+      const roleMatch = !filterRole || user.role === filterRole;
+      const statusMatch = !filterStatus || user.status === filterStatus;
+      return roleMatch && statusMatch;
+    });
+  }, [rows, filterRole, filterStatus]);
+
+  // ===== Selected user (view / edit / delete) =====
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // ===== Add form state =====
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -69,7 +102,19 @@ export default function UserAccounts() {
   const [touched, setTouched] = useState({});
   const [saving, setSaving] = useState(false);
 
-  // ===== Validation =====
+  // ===== Edit form state =====
+  const [editForm, setEditForm] = useState({
+    id: null,
+    name: '',
+    email: '',
+    role: '',
+    password: '',
+    confirm: '',
+  });
+  const [editTouched, setEditTouched] = useState({});
+  const [updating, setUpdating] = useState(false);
+
+  // ===== Validation (Add) =====
   const errors = useMemo(() => {
     const e = {};
     if (!form.name.trim()) e.name = 'Full name is required.';
@@ -86,12 +131,46 @@ export default function UserAccounts() {
     return e;
   }, [form]);
 
+  // ===== Validation (Edit – password optional) =====
+  const editErrors = useMemo(() => {
+    const e = {};
+    if (!editForm.name.trim()) e.name = 'Full name is required.';
+    if (!editForm.email.trim()) e.email = 'Email is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email))
+      e.email = 'Enter a valid email.';
+    if (!editForm.role) e.role = 'Select a role.';
+    if (editForm.password) {
+      if (editForm.password.length < 8)
+        e.password = 'Use at least 8 characters.';
+      if (editForm.confirm !== editForm.password)
+        e.confirm = 'Passwords do not match.';
+    }
+    return e;
+  }, [editForm]);
+
+  // ===== Helpers =====
   const handleChange = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
   const handleBlur = (field) => setTouched((t) => ({ ...t, [field]: true }));
   const resetForm = () => {
     setForm({ name: '', email: '', password: '', confirm: '', role: '' });
     setTouched({});
+  };
+
+  const handleEditChange = (field) => (e) =>
+    setEditForm((f) => ({ ...f, [field]: e.target.value }));
+  const handleEditBlur = (field) =>
+    setEditTouched((t) => ({ ...t, [field]: true }));
+  const resetEditForm = () => {
+    setEditForm({
+      id: null,
+      name: '',
+      email: '',
+      role: '',
+      password: '',
+      confirm: '',
+    });
+    setEditTouched({});
   };
 
   // ===== Load users from backend on mount =====
@@ -103,6 +182,7 @@ export default function UserAccounts() {
       if (!res.ok) throw new Error(`Failed to load users (${res.status})`);
       const data = await res.json();
       const mapped = data.map((u) => ({
+        id: u.id, // keep id for edit/delete
         name: u.name,
         email: u.email,
         status: u.status || 'Active',
@@ -161,9 +241,10 @@ export default function UserAccounts() {
 
       const created = await res.json();
 
-      // Optimistic update (or call await loadUsers(); for strict sync with DB)
+      // Optimistic update (keep id)
       setRows((r) => [
         {
+          id: created.id,
           name: created.name,
           email: created.email,
           status: 'Active',
@@ -203,6 +284,113 @@ export default function UserAccounts() {
     }
   };
 
+  // ===== Update user (Edit modal) =====
+  const handleUpdate = async () => {
+    if (Object.keys(editErrors).length) {
+      setEditTouched({
+        name: true,
+        email: true,
+        role: true,
+        ...(editForm.password ? { password: true, confirm: true } : {}),
+      });
+      return;
+    }
+    setUpdating(true);
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim().toLowerCase(),
+        role: editForm.role,
+      };
+      if (editForm.password) payload.password = editForm.password;
+
+      const res = await fetch(`/api/users/${editForm.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || 'Failed to update user');
+      }
+
+      const updated = await res.json();
+
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === updated.id
+            ? {
+                ...row,
+                name: updated.name,
+                email: updated.email,
+                role: updated.role,
+                status: updated.status || row.status,
+              }
+            : row,
+        ),
+      );
+
+      toast({ title: 'User updated', status: 'success', isClosable: true });
+      editDisclosure.onClose();
+      resetEditForm();
+    } catch (err) {
+      toast({
+        title: 'Could not update user',
+        description: err.message,
+        status: 'error',
+        isClosable: true,
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // ===== Delete user (two-step confirm) =====
+  const askDelete = (row) => {
+    setDeleteTarget(row);
+    deleteStep1.onOpen();
+  };
+
+  const proceedDeleteStep2 = () => {
+    deleteStep1.onClose();
+    deleteStep2.onOpen();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget?.id) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/users/${deleteTarget.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || 'Failed to delete user');
+      }
+
+      // Remove from table
+      setRows((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+
+      toast({
+        title: 'Successfully deleted user account',
+        status: 'success',
+        isClosable: true,
+      });
+      deleteStep2.onClose();
+      setDeleteTarget(null);
+    } catch (err) {
+      toast({
+        title: 'Could not delete user',
+        description: err.message,
+        status: 'error',
+        isClosable: true,
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Box color={textColor}>
       {/* Toolbar */}
@@ -224,7 +412,9 @@ export default function UserAccounts() {
 
         <Select
           maxW="200px"
-          placeholder="Role"
+          placeholder="Role" // empty selection means "All"
+          value={filterRole} // <-- controlled
+          onChange={(e) => setFilterRole(e.target.value)}
           color={textColor}
           borderColor={borderColor}
           _hover={{ borderColor }}
@@ -232,14 +422,16 @@ export default function UserAccounts() {
           sx={{ option: { color: textColor } }}
           bg={useColorModeValue('white', 'transparent')}
         >
-          <option>Platform Admin</option>
-          <option>Network Admin</option>
-          <option>Security Analyst</option>
+          <option value="Platform Admin">Platform Admin</option>
+          <option value="Network Admin">Network Admin</option>
+          <option value="Security Analyst">Security Analyst</option>
         </Select>
 
         <Select
           maxW="200px"
-          placeholder="Status"
+          placeholder="Status" // empty selection means "All"
+          value={filterStatus} // <-- controlled
+          onChange={(e) => setFilterStatus(e.target.value)}
           color={textColor}
           borderColor={borderColor}
           _hover={{ borderColor }}
@@ -247,11 +439,11 @@ export default function UserAccounts() {
           sx={{ option: { color: textColor } }}
           bg={useColorModeValue('white', 'transparent')}
         >
-          <option>Active</option>
-          <option>Inactive</option>
-          <option>Pending</option>
-          <option>Suspended</option>
-          <option>Deleted</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+          <option value="Pending">Pending</option>
+          <option value="Suspended">Suspended</option>
+          <option value="Deleted">Deleted</option>
         </Select>
 
         <Button ms="auto" variant="brand" onClick={onOpen}>
@@ -286,8 +478,8 @@ export default function UserAccounts() {
             </Tr>
           </Thead>
           <Tbody>
-            {rows.map((r) => (
-              <Tr key={r.email}>
+            {filteredRows.map((r) => (
+              <Tr key={r.id ?? r.email}>
                 <Td>
                   <Text fontWeight="semibold" color={textColor}>
                     {r.name}
@@ -316,6 +508,11 @@ export default function UserAccounts() {
                     size="sm"
                     color={textColor}
                     mr={1}
+                    _hover={{ bg: hoverBg }}
+                    onClick={() => {
+                      setSelectedUser(r);
+                      viewDisclosure.onOpen();
+                    }}
                   />
                   <IconButton
                     aria-label="Edit"
@@ -324,13 +521,29 @@ export default function UserAccounts() {
                     size="sm"
                     color={textColor}
                     mr={1}
+                    _hover={{ bg: hoverBg }}
+                    onClick={() => {
+                      setSelectedUser(r);
+                      setEditForm({
+                        id: r.id,
+                        name: r.name,
+                        email: r.email,
+                        role: r.role,
+                        password: '',
+                        confirm: '',
+                      });
+                      setEditTouched({});
+                      editDisclosure.onOpen();
+                    }}
                   />
                   <IconButton
                     aria-label="Delete"
                     icon={<FiTrash2 />}
                     variant="ghost"
                     size="sm"
-                    color={textColor}
+                    colorScheme="red"
+                    _hover={{ bg: hoverBg }}
+                    onClick={() => askDelete(r)}
                   />
                 </Td>
               </Tr>
@@ -470,6 +683,263 @@ export default function UserAccounts() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* View User Modal (read-only) */}
+      <Modal
+        isOpen={viewDisclosure.isOpen}
+        onClose={viewDisclosure.onClose}
+        size="md"
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent bg={cardBg}>
+          <ModalHeader color={textColor}>User Details</ModalHeader>
+          <ModalCloseButton color={textColorSecondary} />
+          <ModalBody>
+            {selectedUser ? (
+              <Box>
+                <Text color={textColor} mb={2}>
+                  <strong>Full Name:</strong> {selectedUser.name}
+                </Text>
+                <Text color={textColor} mb={2}>
+                  <strong>Email:</strong> {selectedUser.email}
+                </Text>
+                <Text color={textColor} mb={2}>
+                  <strong>Role:</strong> {selectedUser.role}
+                </Text>
+                <Text color={textColor} mb={2}>
+                  <strong>Status:</strong> {selectedUser.status}
+                </Text>
+                <Text color={textColorSecondary} mb={2}>
+                  <strong>Joined Date:</strong> {selectedUser.joined}
+                </Text>
+                <Text color={textColorSecondary}>
+                  <strong>Last Active:</strong> {selectedUser.lastActive}
+                </Text>
+              </Box>
+            ) : (
+              <Text color={textColorSecondary}>No user selected.</Text>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="brand" onClick={viewDisclosure.onClose}>
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Edit User Modal */}
+      <Modal
+        isOpen={editDisclosure.isOpen}
+        onClose={() => {
+          editDisclosure.onClose();
+          resetEditForm();
+        }}
+        size="lg"
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent bg={cardBg}>
+          <ModalHeader color={textColor}>Edit User</ModalHeader>
+          <ModalCloseButton color={textColorSecondary} />
+          <ModalBody>
+            <Flex direction="column" gap={4}>
+              <FormControl isInvalid={editTouched.name && !!editErrors.name}>
+                <FormLabel color={textColor}>Full Name</FormLabel>
+                <Input
+                  value={editForm.name}
+                  onChange={handleEditChange('name')}
+                  onBlur={() => handleEditBlur('name')}
+                  placeholder="Jane Doe"
+                  color={textColor}
+                  _placeholder={{ color: textColorSecondary }}
+                  borderColor={borderColor}
+                  _hover={{ borderColor }}
+                  _focus={{ borderColor }}
+                  bg={useColorModeValue('white', 'transparent')}
+                />
+                <FormErrorMessage>{editErrors.name}</FormErrorMessage>
+              </FormControl>
+
+              <FormControl isInvalid={editTouched.email && !!editErrors.email}>
+                <FormLabel color={textColor}>Email address</FormLabel>
+                <Input
+                  type="email"
+                  value={editForm.email}
+                  onChange={handleEditChange('email')}
+                  onBlur={() => handleEditBlur('email')}
+                  placeholder="jane.doe@company.com"
+                  color={textColor}
+                  _placeholder={{ color: textColorSecondary }}
+                  borderColor={borderColor}
+                  _hover={{ borderColor }}
+                  _focus={{ borderColor }}
+                  bg={useColorModeValue('white', 'transparent')}
+                />
+                <FormErrorMessage>{editErrors.email}</FormErrorMessage>
+              </FormControl>
+
+              <FormControl isInvalid={editTouched.role && !!editErrors.role}>
+                <FormLabel color={textColor}>Role</FormLabel>
+                <Select
+                  placeholder="Select role"
+                  value={editForm.role}
+                  onChange={handleEditChange('role')}
+                  onBlur={() => handleEditBlur('role')}
+                  color={textColor}
+                  borderColor={borderColor}
+                  _hover={{ borderColor }}
+                  _focus={{ borderColor }}
+                  sx={{ option: { color: textColor } }}
+                  bg={useColorModeValue('white', 'transparent')}
+                >
+                  <option value="Platform Admin">Platform Admin</option>
+                  <option value="Network Admin">Network Admin</option>
+                  <option value="Security Analyst">Security Analyst</option>
+                </Select>
+                <FormErrorMessage>{editErrors.role}</FormErrorMessage>
+              </FormControl>
+
+              <FormControl
+                isInvalid={editTouched.password && !!editErrors.password}
+              >
+                <FormLabel color={textColor}>New Password (optional)</FormLabel>
+                <Input
+                  type="password"
+                  value={editForm.password}
+                  onChange={handleEditChange('password')}
+                  onBlur={() => handleEditBlur('password')}
+                  placeholder="Leave blank to keep current password"
+                  color={textColor}
+                  _placeholder={{ color: textColorSecondary }}
+                  borderColor={borderColor}
+                  _hover={{ borderColor }}
+                  _focus={{ borderColor }}
+                  bg={useColorModeValue('white', 'transparent')}
+                />
+                <FormErrorMessage>{editErrors.password}</FormErrorMessage>
+              </FormControl>
+
+              <FormControl
+                isInvalid={editTouched.confirm && !!editErrors.confirm}
+              >
+                <FormLabel color={textColor}>Confirm New Password</FormLabel>
+                <Input
+                  type="password"
+                  value={editForm.confirm}
+                  onChange={handleEditChange('confirm')}
+                  onBlur={() => handleEditBlur('confirm')}
+                  color={textColor}
+                  borderColor={borderColor}
+                  _hover={{ borderColor }}
+                  _focus={{ borderColor }}
+                  bg={useColorModeValue('white', 'transparent')}
+                />
+                <FormErrorMessage>{editErrors.confirm}</FormErrorMessage>
+              </FormControl>
+            </Flex>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button
+              mr={3}
+              onClick={() => {
+                editDisclosure.onClose();
+                resetEditForm();
+              }}
+              variant="ghost"
+              color={textColor}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="brand"
+              onClick={handleUpdate}
+              isLoading={updating}
+              loadingText="Saving..."
+            >
+              Save Changes
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Delete: Step 1 confirmation */}
+      <AlertDialog
+        isOpen={deleteStep1.isOpen}
+        leastDestructiveRef={cancelRef1}
+        onClose={deleteStep1.onClose}
+        isCentered
+      >
+        <AlertDialogOverlay />
+        <AlertDialogContent bg={cardBg}>
+          <AlertDialogHeader color={textColor}>
+            Delete account?
+          </AlertDialogHeader>
+          <AlertDialogBody color={textColorSecondary}>
+            You’re about to delete{' '}
+            <Text as="span" color={textColor} fontWeight="semibold">
+              {deleteTarget?.name}
+            </Text>
+            . This action will remove the account and related records.
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <Button
+              ref={cancelRef1}
+              onClick={deleteStep1.onClose}
+              variant="ghost"
+              color={textColor}
+            >
+              Cancel
+            </Button>
+            <Button colorScheme="red" onClick={proceedDeleteStep2} ml={3}>
+              Delete Account
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete: Step 2 double-confirm */}
+      <AlertDialog
+        isOpen={deleteStep2.isOpen}
+        leastDestructiveRef={cancelRef2}
+        onClose={deleteStep2.onClose}
+        isCentered
+      >
+        <AlertDialogOverlay />
+        <AlertDialogContent bg={cardBg}>
+          <AlertDialogHeader color={textColor}>
+            Are you absolutely sure?
+          </AlertDialogHeader>
+          <AlertDialogBody color={textColorSecondary}>
+            This action is permanent. The account for{' '}
+            <Text as="span" color={textColor} fontWeight="semibold">
+              {deleteTarget?.email}
+            </Text>{' '}
+            will be removed and cannot be recovered.
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <Button
+              ref={cancelRef2}
+              onClick={deleteStep2.onClose}
+              variant="ghost"
+              color={textColor}
+            >
+              Back
+            </Button>
+            <Button
+              colorScheme="red"
+              onClick={handleDelete}
+              ml={3}
+              isLoading={deleting}
+              loadingText="Deleting..."
+            >
+              Permanently Delete
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Box>
   );
 }

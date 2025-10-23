@@ -125,9 +125,7 @@ export default function ProfileTypes() {
                   leftIcon={<FiEye />}
                   mr={1}
                   onClick={() => onView(r)}
-                >
-                  View
-                </Button>
+                ></Button>
                 <IconButton
                   aria-label="Edit"
                   icon={<FiEdit2 />}
