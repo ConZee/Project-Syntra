@@ -41,6 +41,7 @@
     "deploy": "gh-pages -d build",
     "preinstall": "npx npm-force-resolutions"
   },
+  "proxy": "http://localhost:3001",
   "resolutions": {
     "react-error-overlay": "6.0.9"
   },
