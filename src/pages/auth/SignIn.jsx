@@ -31,66 +31,76 @@ function SignIn() {
   const navigate = useNavigate();
 
   // Form state
-  const [userType, setUserType] = React.useState('Platform Admin');
-  const [username, setUsername] = React.useState('');
+  const [userType, setUserType] = React.useState('Platform Admin'); // dropdown role selector
+  const [email, setEmail] = React.useState(''); // treat as email
   const [password, setPassword] = React.useState('');
   const [err, setErr] = React.useState('');
-
-  // Frontend-only demo accounts (prototype)
-  // username/password must match the selected profile's base below
-  const DEMO = [
-    { username: 'pa', password: 'pa123', base: '/platform-admin',  name: 'Platform Admin',   avatarUrl: '' },
-    { username: 'na', password: 'na123', base: '/network-admin',   name: 'Network Admin',    avatarUrl: '' },
-    { username: 'sa', password: 'sa123', base: '/security-analyst',name: 'Security Analyst', avatarUrl: '' },
-  ];
+  const [submitting, setSubmitting] = React.useState(false);
 
   // Map dropdown label → base path (URL prefix drives role)
   const baseFor = (label) => {
     switch (label) {
-      case 'Platform Admin':  return '/platform-admin';
-      case 'Network Admin':   return '/network-admin';
-      case 'Security Analyst':return '/security-analyst';
-      default:                return '/platform-admin';
+      case 'Platform Admin':
+        return '/platform-admin';
+      case 'Network Admin':
+        return '/network-admin';
+      case 'Security Analyst':
+        return '/security-analyst';
+      default:
+        return '/platform-admin';
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setErr('');
-
-    if (!userType || !username || !password) {
-      setErr('Please fill in all fields.');
-      return;
-    }
-
-    const base = baseFor(userType);
-    const match = DEMO.find(
-      (u) => u.username === username && u.password === password && u.base === base
-    );
-
-    if (!match) {
-      setErr('Invalid credentials or profile type.');
-      return;
-    }
-
-    // Minimal user object for UI (profile/avatar/sidebar)
-    const { password: _drop, ...user } = match; // strip pw
-
-    // Persist for refreshes / sidebar profile
-    localStorage.setItem('syntra_user', JSON.stringify(user));
-
-    // If your AuthContext wants a token+user, feed it a demo token
-    login?.('demo-token', user);
-
-    // Frontend redirect to the role's dashboard
-    navigate(`${user.base}/dashboard`, { replace: true });
-  };
-
-  // Chakra colors
   const textColor = useColorModeValue('navy.700', 'white');
   const textColorSecondary = 'gray.400';
   const textColorBrand = useColorModeValue('brand.500', 'white');
   const brandStars = useColorModeValue('brand.500', 'brand.400');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErr('');
+
+    if (!userType || !email || !password) {
+      setErr('Please fill in all fields.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // CRA dev proxy forwards /api → http://localhost:3001
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+          expectedRole: userType, // optional server-side role check
+        }),
+      });
+
+      if (!res.ok) {
+        const msg = await res.json().catch(() => ({}));
+        throw new Error(msg?.error || 'Login failed.');
+      }
+
+      const { token, user } = await res.json();
+
+      // Persist for refreshes / sidebar profile
+      localStorage.setItem('syntra_user', JSON.stringify(user));
+      localStorage.setItem('syntra_token', token);
+
+      // If your AuthContext expects token + user
+      login?.(token, user);
+
+      // Route from user.role (source of truth) — even if dropdown differed
+      const base = baseFor(user.role || userType);
+      navigate(`${base}/dashboard`, { replace: true });
+    } catch (e2) {
+      setErr(e2.message || 'Login failed.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <DefaultAuth illustrationBackground={illustration} image={illustration}>
@@ -135,7 +145,7 @@ function SignIn() {
         >
           <form onSubmit={handleSubmit}>
             <FormControl>
-              {/* User Type */}
+              {/* User Type (role) */}
               <FormLabel
                 display="flex"
                 ms="4px"
@@ -161,7 +171,7 @@ function SignIn() {
                 <option>Security Analyst</option>
               </Select>
 
-              {/* Username */}
+              {/* Email (used to authenticate against users.db) */}
               <FormLabel
                 display="flex"
                 ms="4px"
@@ -170,19 +180,19 @@ function SignIn() {
                 color={textColor}
                 mb="8px"
               >
-                Username<Text color={brandStars}>*</Text>
+                Email<Text color={brandStars}>*</Text>
               </FormLabel>
               <Input
                 isRequired
                 variant="auth"
                 fontSize="sm"
-                type="text"
-                placeholder="Enter your username"
+                type="email"
+                placeholder="Enter your email"
                 mb="24px"
                 fontWeight="500"
                 size="lg"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 autoComplete="off"
               />
 
@@ -207,6 +217,7 @@ function SignIn() {
                   variant="auth"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="off"
                 />
                 <InputRightElement display="flex" alignItems="center" mt="4px">
                   <Icon
@@ -232,6 +243,8 @@ function SignIn() {
                 w="100%"
                 h="50"
                 mb="12px"
+                isLoading={submitting}
+                loadingText="Signing in..."
               >
                 Sign In
               </Button>

@@ -104,6 +104,57 @@ app.get('/api/users', (req, res) => {
   );
 });
 
+// POST /api/auth/login - authenticate user against SQLite (email + password)
+app.post('/api/auth/login', (req, res) => {
+  const { email, password, expectedRole } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  const sql = `SELECT id, name, email, role, status, joined_at, last_active, password_hash FROM users WHERE email = ? LIMIT 1`;
+  db.get(sql, [email.toLowerCase()], async (err, row) => {
+    if (err) {
+      console.error('DB error:', err);
+      return res.status(500).json({ error: 'Internal server error.' });
+    }
+    if (!row) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    try {
+      const ok = await bcrypt.compare(password, row.password_hash);
+      if (!ok) {
+        return res.status(401).json({ error: 'Invalid email or password.' });
+      }
+
+      // Optional: ensure selected role matches account role
+      if (expectedRole && expectedRole !== row.role) {
+        return res
+          .status(403)
+          .json({ error: 'Role mismatch for this account.' });
+      }
+
+      // Issue a simple demo token (for real apps, sign a JWT)
+      const token = 'demo-token-' + row.id;
+
+      return res.json({
+        token,
+        user: {
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          role: row.role,
+          status: row.status,
+          joined_at: row.joined_at,
+          last_active: row.last_active,
+        },
+      });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: 'Authentication failed.' });
+    }
+  });
+});
+
 const PORT = 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
