@@ -10,12 +10,19 @@ import {
   Text,
   useColorModeValue,
   useColorMode,
+  useDisclosure, // <-- added
+  AlertDialog, // <-- added
+  AlertDialogOverlay, // <-- added
+  AlertDialogContent, // <-- added
+  AlertDialogHeader, // <-- added
+  AlertDialogBody, // <-- added
+  AlertDialogFooter, // <-- added
 } from '@chakra-ui/react';
 import { ItemContent } from 'components/menu/ItemContent';
 import { SearchBar } from 'components/navbar/searchBar/SearchBar';
 import { SidebarResponsive } from 'components/sidebar/Sidebar';
 import PropTypes from 'prop-types';
-import React from 'react';
+import React, { useRef } from 'react'; // <-- useRef added
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -32,7 +39,8 @@ export default function HeaderLinks(props) {
   const { logout, user: authUser } = useAuth();
 
   // user display
-  const rawUser = typeof window !== 'undefined' ? localStorage.getItem('syntra_user') : null;
+  const rawUser =
+    typeof window !== 'undefined' ? localStorage.getItem('syntra_user') : null;
   const storedUser = rawUser ? JSON.parse(rawUser) : null;
   const displayName = authUser?.name ?? storedUser?.name ?? 'User';
   const avatarUrl = authUser?.avatarUrl ?? storedUser?.avatarUrl ?? '';
@@ -49,12 +57,22 @@ export default function HeaderLinks(props) {
   const ethBox = useColorModeValue('white', 'navy.800');
   const shadow = useColorModeValue(
     '14px 17px 40px 4px rgba(112, 144, 176, 0.18)',
-    '14px 17px 40px 4px rgba(112, 144, 176, 0.06)'
+    '14px 17px 40px 4px rgba(112, 144, 176, 0.06)',
   );
   const borderButton = useColorModeValue('secondaryGray.500', 'whiteAlpha.200');
 
+  // logout confirmation dialog
+  const {
+    isOpen: isLogoutOpen,
+    onOpen: onLogoutOpen,
+    onClose: onLogoutClose,
+  } = useDisclosure();
+  const cancelRef = useRef();
+
   const handleLogout = () => {
-    try { logout?.(); } catch {}
+    try {
+      logout?.();
+    } catch {}
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('syntra_user');
@@ -87,23 +105,47 @@ export default function HeaderLinks(props) {
         align="center"
         me="6px"
       >
-        <Flex align="center" justify="center" bg={ethBox} h="29px" w="29px" borderRadius="30px" me="7px">
+        <Flex
+          align="center"
+          justify="center"
+          bg={ethBox}
+          h="29px"
+          w="29px"
+          borderRadius="30px"
+          me="7px"
+        >
           <Icon color={ethColor} w="9px" h="14px" as={FaEthereum} />
         </Flex>
-        <Text w="max-content" color={ethColor} fontSize="sm" fontWeight="700" me="6px">
+        <Text
+          w="max-content"
+          color={ethColor}
+          fontSize="sm"
+          fontWeight="700"
+          me="6px"
+        >
           1,924
-          <Text as="span" display={{ base: 'none', md: 'unset' }}>{' '}ETH</Text>
+          <Text as="span" display={{ base: 'none', md: 'unset' }}>
+            {' '}
+            ETH
+          </Text>
         </Text>
       </Flex>
 
       {/* Notifications menu */}
       <Menu autoSelect={false}>
         <MenuButton p="0px">
-          <Icon mt="6px" as={MdNotificationsNone} color={navbarIcon} w="18px" h="18px" me="10px" />
+          <Icon
+            mt="6px"
+            as={MdNotificationsNone}
+            color={navbarIcon}
+            w="18px"
+            h="18px"
+            me="10px"
+          />
         </MenuButton>
         <MenuList
-          boxShadow="none"                // no glow by default
-          _hover={{ boxShadow: shadow }}  // glow only on hover
+          boxShadow="none" // no glow by default
+          _hover={{ boxShadow: shadow }} // glow only on hover
           transition="box-shadow .15s ease"
           p="20px"
           borderRadius="20px"
@@ -115,8 +157,16 @@ export default function HeaderLinks(props) {
           maxW={{ base: '360px', md: 'unset' }}
         >
           <Flex w="100%" mb="20px">
-            <Text fontSize="md" fontWeight="600" color={textColor}>Notifications</Text>
-            <Text fontSize="sm" fontWeight="500" color={textColorBrand} ms="auto" cursor="pointer">
+            <Text fontSize="md" fontWeight="600" color={textColor}>
+              Notifications
+            </Text>
+            <Text
+              fontSize="sm"
+              fontWeight="500"
+              color={textColorBrand}
+              ms="auto"
+              cursor="pointer"
+            >
               Mark all read
             </Text>
           </Flex>
@@ -153,7 +203,13 @@ export default function HeaderLinks(props) {
         w="max-content"
         onClick={toggleColorMode}
       >
-        <Icon me="10px" h="18px" w="18px" color={navbarIcon} as={colorMode === 'light' ? IoMdMoon : IoMdSunny} />
+        <Icon
+          me="10px"
+          h="18px"
+          w="18px"
+          color={navbarIcon}
+          as={colorMode === 'light' ? IoMdMoon : IoMdSunny}
+        />
       </Button>
 
       {/* Profile menu */}
@@ -172,8 +228,8 @@ export default function HeaderLinks(props) {
         </MenuButton>
 
         <MenuList
-          boxShadow="none"                       // no glow by default
-          _hover={{ boxShadow: shadow }}         // glow only when hovering the list
+          boxShadow="none" // no glow by default
+          _hover={{ boxShadow: shadow }} // glow only when hovering the list
           transition="box-shadow .15s ease"
           p="0px"
           mt="10px"
@@ -200,7 +256,7 @@ export default function HeaderLinks(props) {
           <Flex flexDirection="column" p="10px">
             <MenuItem
               bg="transparent"
-              _hover={{ bg: hoverBg }}            // subtle background on hover
+              _hover={{ bg: hoverBg }} // subtle background on hover
               borderRadius="8px"
               px="14px"
               transition="background-color .12s ease"
@@ -224,7 +280,7 @@ export default function HeaderLinks(props) {
               color="red.400"
               borderRadius="8px"
               px="14px"
-              onClick={handleLogout}
+              onClick={onLogoutOpen} // <-- open confirm dialog
               transition="background-color .12s ease"
             >
               <Text fontSize="sm">Log out</Text>
@@ -232,6 +288,46 @@ export default function HeaderLinks(props) {
           </Flex>
         </MenuList>
       </Menu>
+
+      {/* Logout confirmation dialog */}
+      <AlertDialog
+        isOpen={isLogoutOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={onLogoutClose}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent bg={menuBg}>
+            <AlertDialogHeader
+              fontSize="lg"
+              fontWeight="bold"
+              color={textColor}
+            >
+              Confirm Logout
+            </AlertDialogHeader>
+
+            <AlertDialogBody color={textColor}>
+              Are you sure you want to log out?
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={onLogoutClose}>
+                No
+              </Button>
+              <Button
+                colorScheme="red"
+                ml={3}
+                onClick={() => {
+                  onLogoutClose();
+                  handleLogout();
+                }}
+              >
+                Yes
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Flex>
   );
 }
