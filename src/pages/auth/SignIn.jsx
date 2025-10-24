@@ -166,9 +166,13 @@ function SignIn() {
                 color={textColor}
                 sx={{ option: { color: textColor } }}
               >
-                <option>Platform Admin</option>
-                <option>Network Admin</option>
-                <option>Security Analyst</option>
+                <option value="Platform Administrator">
+                  Platform Administrator
+                </option>
+                <option value="Network Administrator">
+                  Network Administrator
+                </option>
+                <option value="Security Analyst">Security Analyst</option>
               </Select>
 
               {/* Email (used to authenticate against users.db) */}

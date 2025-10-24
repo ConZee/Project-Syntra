@@ -1,5 +1,5 @@
-import React from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import React from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -17,13 +17,14 @@ import {
 import { FaChevronLeft } from 'react-icons/fa';
 import DefaultAuth from 'layouts/auth/Default';
 import illustration from 'assets/img/auth/auth.jpeg';
-// import api from "../../../services/api"; // when backend is ready
+// import api from "./././services/api"; // when backend is ready
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [username, setUsername] = React.useState('');
+  // CHANGED: username → email
+  const [email, setEmail] = React.useState('');
   const [userType, setUserType] = React.useState('Security Analyst');
   const [err, setErr] = React.useState('');
   const [loading, setLoading] = React.useState(false);
@@ -35,14 +36,15 @@ export default function ForgotPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr('');
-    if (!username) {
-      setErr('Username is required.');
+    // CHANGED: validate email instead of username
+    if (!email) {
+      setErr('Email is required.');
       return;
     }
     setLoading(true);
     try {
       // TODO: replace with real API call
-      // await api.post("/auth/forgot-password", { username, userType });
+      // await api.post("/auth/forgot-password", { email, userType });
       await new Promise((r) => setTimeout(r, 500));
 
       toast({
@@ -108,7 +110,7 @@ export default function ForgotPassword() {
             fontWeight="400"
             fontSize="md"
           >
-            Enter your username. A Platform Admin will reset/configure it.
+            Enter your email. A Platform Admin will reset/configure it.
           </Text>
         </Box>
 
@@ -125,7 +127,7 @@ export default function ForgotPassword() {
         >
           <form onSubmit={handleSubmit}>
             <FormControl>
-              {/* Optional: User Type for context */}
+              {/* Optional: User Type for context (unchanged) */}
               <FormLabel
                 ms="4px"
                 fontSize="sm"
@@ -147,8 +149,8 @@ export default function ForgotPassword() {
                   option: { color: textColor },
                 }}
               >
-                <option>Platform Admin</option>
-                <option>Network Admin</option>
+                <option>Platform Administrator</option>
+                <option>Network Administrator</option>
                 <option>Security Analyst</option>
               </Select>
 
@@ -160,19 +162,19 @@ export default function ForgotPassword() {
                 color={textColor}
                 mb="8px"
               >
-                Username<Text color={brandStars}>*</Text>
+                Email<Text color={brandStars}>*</Text>
               </FormLabel>
               <Input
                 isRequired
                 variant="auth"
                 fontSize="sm"
-                type="text"
-                placeholder="Enter your username"
+                type="email"
+                placeholder="Enter your email"
                 mb="20px"
                 fontWeight="500"
                 size="lg"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 autoComplete="off"
               />
 

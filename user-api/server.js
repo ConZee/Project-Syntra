@@ -14,7 +14,7 @@ app.use(bodyParser.json());
 
 // Enable CORS with support for PUT/DELETE + preflight
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*'); // tighten in prod
+  res.header('Access-Control-Allow-Origin', '*');
   res.header(
     'Access-Control-Allow-Headers',
     'Origin, X-Requested-With, Content-Type, Accept, Authorization',
@@ -289,6 +289,70 @@ app.delete('/api/users/:id', (req, res) => {
     if (this.changes === 0)
       return res.status(404).json({ error: 'User not found.' });
     return res.json({ success: true });
+  });
+});
+
+// Create tables if not exists
+db.run(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Active',
+    joined_at TEXT NOT NULL,
+    last_active TEXT
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS profile_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TEXT NOT NULL
+  )
+`);
+
+// --- Profile Types API ---
+// GET /api/profile-types  -> list all profile types
+app.get('/api/profile-types', (req, res) => {
+  db.all(
+    `SELECT id, name, status, created_at FROM profile_types ORDER BY id DESC`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      return res.json(rows);
+    },
+  );
+});
+
+// POST /api/profile-types -> create a new profile type
+app.post('/api/profile-types', (req, res) => {
+  const { name, status } = req.body || {};
+  if (!name || !status) {
+    return res.status(400).json({ error: 'name and status are required.' });
+  }
+  const now = new Date().toISOString();
+  const sql = `
+    INSERT INTO profile_types (name, status, created_at)
+    VALUES (?, ?, ?)
+  `;
+  db.run(sql, [name.trim(), status, now], function (err) {
+    if (err) {
+      if (String(err.message).includes('UNIQUE')) {
+        return res.status(409).json({ error: 'Profile type already exists.' });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+    // return the created row
+    return res.status(201).json({
+      id: this.lastID,
+      name: name.trim(),
+      status,
+      created_at: now,
+    });
   });
 });
 
