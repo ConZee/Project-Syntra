@@ -387,6 +387,50 @@ app.post('/api/profile-types', (req, res) => {
   });
 });
 
+// PUT /api/profile-types/:id -> update { name, status }
+app.put('/api/profile-types/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const { name, status } = req.body || {};
+
+  if (!id || !name || !status) {
+    return res.status(400).json({ error: 'id, name and status are required.' });
+  }
+
+  const sql = `UPDATE profile_types SET name = ?, status = ? WHERE id = ?`;
+  db.run(sql, [String(name).trim(), String(status).trim(), id], function (err) {
+    if (err) {
+      if (String(err.message).includes('UNIQUE')) {
+        return res.status(409).json({ error: 'Profile type already exists.' });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Profile type not found.' });
+    }
+    db.get(
+      `SELECT id, name, status, created_at FROM profile_types WHERE id = ?`,
+      [id],
+      (err2, row) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        return res.json(row);
+      },
+    );
+  });
+});
+
+// DELETE /api/profile-types/:id
+app.delete('/api/profile-types/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Valid id is required.' });
+
+  db.run(`DELETE FROM profile_types WHERE id = ?`, [id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0)
+      return res.status(404).json({ error: 'Profile type not found.' });
+    return res.json({ success: true });
+  });
+});
+
 const PORT = 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
