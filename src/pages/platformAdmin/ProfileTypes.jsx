@@ -53,7 +53,7 @@ const normalizeProfileName = (n = '') => {
 const statusColor = (s) =>
   ({
     Active: 'green',
-    Inactive: 'gray',
+    Inactive: 'yellow',
   }[s] || 'gray');
 
 export default function ProfileTypes() {
