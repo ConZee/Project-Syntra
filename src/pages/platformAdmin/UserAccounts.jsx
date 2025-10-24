@@ -42,7 +42,7 @@ import { FiSearch, FiEdit2, FiTrash2, FiEye } from 'react-icons/fi';
 const statusColor = (s) =>
   ({
     Active: 'green',
-    Inactive: 'gray',
+    Inactive: 'yellow',
     Pending: 'blue',
     Deleted: 'red',
     Suspended: 'orange',
