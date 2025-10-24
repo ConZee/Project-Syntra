@@ -422,8 +422,8 @@ export default function UserAccounts() {
           sx={{ option: { color: textColor } }}
           bg={useColorModeValue('white', 'transparent')}
         >
-          <option value="Platform Admin">Platform Admin</option>
-          <option value="Network Admin">Network Admin</option>
+          <option value="Platform Administrator">Platform Administrator</option>
+          <option value="Network Administrator">Network Administrator</option>
           <option value="Security Analyst">Security Analyst</option>
         </Select>
 
@@ -651,8 +651,12 @@ export default function UserAccounts() {
                   sx={{ option: { color: textColor } }}
                   bg={useColorModeValue('white', 'transparent')}
                 >
-                  <option value="Platform Admin">Platform Admin</option>
-                  <option value="Network Admin">Network Admin</option>
+                  <option value="Platform Administrator">
+                    Platform Administrator
+                  </option>
+                  <option value="Network Administrator">
+                    Network Administrator
+                  </option>
                   <option value="Security Analyst">Security Analyst</option>
                 </Select>
                 <FormErrorMessage>{errors.role}</FormErrorMessage>
@@ -794,8 +798,12 @@ export default function UserAccounts() {
                   sx={{ option: { color: textColor } }}
                   bg={useColorModeValue('white', 'transparent')}
                 >
-                  <option value="Platform Admin">Platform Admin</option>
-                  <option value="Network Admin">Network Admin</option>
+                  <option value="Platform Administrator">
+                    Platform Administrator
+                  </option>
+                  <option value="Network Administrator">
+                    Network Administrator
+                  </option>
                   <option value="Security Analyst">Security Analyst</option>
                 </Select>
                 <FormErrorMessage>{editErrors.role}</FormErrorMessage>
