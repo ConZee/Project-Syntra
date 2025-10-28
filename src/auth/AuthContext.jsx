@@ -1,3 +1,4 @@
+// src/auth/AuthContext.jsx
 import React, { createContext, useContext, useMemo, useState } from "react";
 
 const AuthContext = createContext(null);
@@ -23,9 +24,16 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("user");
   };
 
-  const value = useMemo(() => ({
-    user, accessToken, login, logout, isAuthenticated: !!accessToken,
-  }), [user, accessToken]);
+  const hasRole = (roles = []) => {
+    if (!roles?.length) return true;
+    const r = user?.role;
+    return r ? roles.includes(r) : false;
+  };
+
+  const value = useMemo(
+    () => ({ user, accessToken, login, logout, isAuthenticated: !!accessToken, hasRole }),
+    [user, accessToken]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
