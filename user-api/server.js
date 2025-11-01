@@ -456,7 +456,7 @@ app.get(
 );
 
 // GET /api/zeek/logs?limit=20
-// Returns recent Zeek events (any type) from Elasticsearch
+// ⭐ FIXED: Now parses raw TSV message when structured fields are missing
 app.get(
   "/api/zeek/logs",
   authorize(["Platform Administrator", "Security Analyst"]),
@@ -471,25 +471,54 @@ app.get(
         query: { match: { "event.module": "zeek" } },
         _source: [
           "@timestamp",
-          "zeek.event",
-          "zeek.service",
-          "source.ip", "source.port",
-          "destination.ip", "destination.port",
+          "message",
+          "event.dataset",
+          "zeek.session_id",
+          "source.ip",
+          "source.port",
+          "destination.ip",
+          "destination.port",
           "network.transport"
         ],
       });
 
-      const logs = result.hits.hits.map((h) => ({
-        id: h._id,
-        timestamp: h._source?.["@timestamp"],
-        event_type: h._source?.zeek?.event,
-        service: h._source?.zeek?.service,
-        src_ip: h._source?.source?.ip,
-        src_port: h._source?.source?.port,
-        dest_ip: h._source?.destination?.ip,
-        dest_port: h._source?.destination?.port,
-        proto: h._source?.network?.transport,
-      }));
+      const logs = result.hits.hits.map((h) => {
+        const src = h._source;
+
+        // Try structured fields first
+        let src_ip = src?.source?.ip;
+        let src_port = src?.source?.port;
+        let dest_ip = src?.destination?.ip;
+        let dest_port = src?.destination?.port;
+        let proto = src?.network?.transport;
+        let service = "—";
+
+        // If structured fields are missing, parse the raw TSV message
+        if (!src_ip && src?.message) {
+          const parts = src.message.split("\t");
+          // TSV format: ts uid orig_h orig_p resp_h resp_p proto service ...
+          if (parts.length >= 8) {
+            src_ip = parts[2];
+            src_port = parts[3];
+            dest_ip = parts[4];
+            dest_port = parts[5];
+            proto = parts[6];
+            service = parts[7];
+          }
+        }
+
+        return {
+          id: h._id,
+          timestamp: src?.["@timestamp"],
+          event_type: (src?.event?.dataset || "").replace("zeek.", "") || "connection",
+          service: service,
+          src_ip: src_ip || "—",
+          src_port: src_port || "—",
+          dest_ip: dest_ip || "—",
+          dest_port: dest_port || "—",
+          proto: proto || "—",
+        };
+      });
 
       res.json(logs);
     } catch (err) {
