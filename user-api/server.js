@@ -10,18 +10,19 @@ import bcrypt from 'bcrypt';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// ⭐ NEW: added JSON Web Token and Elasticsearch client
+// Added JSON Web Token and Elasticsearch client
 import jwt from 'jsonwebtoken';
 import { Client as ESClient } from '@elastic/elasticsearch';
 
 const SALT_ROUNDS = 10;
 
-// ⭐ NEW: allow overrides via environment variables
+// Allow overrides via environment variables
 const PORT = Number(process.env.PORT || 3001);
 const JWT_SECRET = process.env.JWT_SECRET || 'syntra-secret-key'; // change in prod!
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'syntra-refresh-secret-key'; // change in prod!
 const ELASTIC_URL = process.env.ELASTIC_URL || 'http://192.168.56.128:9200';
 
-// ⭐ NEW: create Elasticsearch client (used by /api/suricata/alerts and /api/zeek/logs)
+// Create Elasticsearch client (used by /api/suricata/alerts and /api/zeek/logs)
 const es = new ESClient({ node: ELASTIC_URL });
 
 // --- Role normalizer (unchanged) ---
@@ -38,7 +39,7 @@ const normalizeRole = (r = '') => {
 const app = express();
 app.use(bodyParser.json());
 
-// CORS (unchanged but expanded headers include Authorization for JWT)
+// CORS (Include Authorization for JWT)
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header(
@@ -50,7 +51,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ⭐ NEW: tiny health endpoints
+// Tiny health endpoints
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'user-api' }));
 app.get('/api/health/es', async (req, res) => {
   try {
@@ -91,27 +92,112 @@ db.serialize(() => {
   db.run(`UPDATE users SET role = 'Network Administrator'  WHERE role IN ('Network Admin','network admin')`);
 });
 
-// ⭐ NEW: JWT-based RBAC middleware
+// JWT verification middleware with better error handling
+function verifyToken(req, res, next) {
+  const header = req.headers.authorization;
+
+  if (!header) {
+    return res.status(401).json({ error: 'No authorization header provided' });
+  }
+
+  try {
+    const token = header.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded; // { id, role, name, email, iat, exp }
+    next();
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
+    }
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token', code: 'INVALID_TOKEN' });
+    }
+    console.error('[verifyToken] Error:', err);
+    return res.status(401).json({ error: 'Authentication failed' });
+  }
+}
+
+// JWT-based RBAC middleware
 function authorize(roles = []) {
   return (req, res, next) => {
     const header = req.headers.authorization;
     if (!header) return res.status(401).json({ error: 'Missing Authorization header' });
+
     try {
       const token = header.split(' ')[1];
       const decoded = jwt.verify(token, JWT_SECRET);
+
       if (roles.length && !roles.includes(decoded.role)) {
         return res.status(403).json({ error: 'Forbidden: insufficient role' });
       }
+
       req.user = decoded; // { id, role, name, email, iat, exp }
       next();
     } catch (err) {
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
+      }
       console.error('[authorize] Invalid token:', err);
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
   };
 }
 
-// ➕ POST /api/users - Create user
+// Token refresh endpoint
+app.post('/api/auth/refresh', (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token required' });
+  }
+
+  try {
+    // Verify the refresh token
+    const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
+
+    // Generate new access token
+    const newAccessToken = jwt.sign(
+      {
+        id: decoded.id,
+        role: decoded.role,
+        name: decoded.name,
+        email: decoded.email
+      },
+      JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
+    // Generate new refresh token
+    const newRefreshToken = jwt.sign(
+      {
+        id: decoded.id,
+        role: decoded.role,
+        name: decoded.name,
+        email: decoded.email
+      },
+      JWT_REFRESH_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Refresh token expired', code: 'REFRESH_TOKEN_EXPIRED' });
+    }
+    console.error('[POST /api/auth/refresh] Error:', err);
+    return res.status(401).json({ error: 'Invalid refresh token' });
+  }
+});
+
+// POST /api/users - Create user
 app.post('/api/users', async (req, res) => {
   const { name, email, password, role } = req.body;
 
@@ -150,7 +236,7 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// 📄 GET /api/users - List users
+// GET /api/users - List users
 app.get('/api/users', (req, res) => {
   db.all(
     `SELECT id, name, email, role, status, joined_at, last_active FROM users ORDER BY id DESC`,
@@ -183,7 +269,7 @@ app.get('/api/users/:id', (req, res) => {
   );
 });
 
-// 🔐 POST /api/auth/login - authenticate (email + password) + issue JWT
+// POST /api/auth/login - authenticate (email + password) + issue JWT
 app.post('/api/auth/login', (req, res) => {
   const { email, password, expectedRole } = req.body || {};
   if (!email || !password) {
@@ -209,15 +295,23 @@ app.post('/api/auth/login', (req, res) => {
         return res.status(403).json({ error: 'Role mismatch for this account.' });
       }
 
-      // ⭐ NEW: sign a real JWT with the user's role
-      const token = jwt.sign(
+      // Generate access token (2 hours)
+      const accessToken = jwt.sign(
         { id: row.id, role: storedRole, name: row.name, email: row.email },
         JWT_SECRET,
         { expiresIn: '2h' }
       );
 
+      // Generate refresh token (7 days)
+      const refreshToken = jwt.sign(
+        { id: row.id, role: storedRole, name: row.name, email: row.email },
+        JWT_REFRESH_SECRET,
+        { expiresIn: '7d' }
+      );
+
       return res.json({
-        token,
+        token: accessToken,
+        refreshToken: refreshToken,
         user: {
           id: row.id,
           name: row.name,
@@ -235,7 +329,7 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// ✏️ PUT /api/users/:id - update name, email, role; optional password
+// PUT /api/users/:id - update name, email, role; optional password
 app.put('/api/users/:id', async (req, res) => {
   const id = Number(req.params.id);
   const { name, email, role, password } = req.body || {};
@@ -356,32 +450,43 @@ app.post('/api/profile-types', (req, res) => {
   if (!name || !status) return res.status(400).json({ error: 'name and status are required.' });
   const now = new Date().toISOString();
   const sql = `INSERT INTO profile_types (name, status, created_at) VALUES (?, ?, ?)`;
-  db.run(sql, [String(name).trim(), String(status).trim(), now], function (err) {
+
+  db.run(sql, [name, status, now], function (err) {
     if (err) {
-      if (String(err.message).includes('UNIQUE')) {
+      if (String(err.message).includes('UNIQUE constraint failed')) {
         return res.status(409).json({ error: 'Profile type already exists.' });
       }
       return res.status(500).json({ error: err.message });
     }
-    return res.status(201).json({ id: this.lastID, name: String(name).trim(), status, created_at: now });
+    return res.status(201).json({ id: this.lastID, name, status, created_at: now });
+  });
+});
+
+app.get('/api/profile-types/:id', (req, res) => {
+  const id = Number(req.params.id);
+  db.get(`SELECT * FROM profile_types WHERE id = ?`, [id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: 'Profile type not found.' });
+    return res.json(row);
   });
 });
 
 app.put('/api/profile-types/:id', (req, res) => {
   const id = Number(req.params.id);
   const { name, status } = req.body || {};
-  if (!id || !name || !status) return res.status(400).json({ error: 'id, name and status are required.' });
+  if (!name || !status) return res.status(400).json({ error: 'name and status are required.' });
 
   const sql = `UPDATE profile_types SET name = ?, status = ? WHERE id = ?`;
-  db.run(sql, [String(name).trim(), String(status).trim(), id], function (err) {
+  db.run(sql, [name, status, id], function (err) {
     if (err) {
-      if (String(err.message).includes('UNIQUE')) {
-        return res.status(409).json({ error: 'Profile type already exists.' });
+      if (String(err.message).includes('UNIQUE constraint failed')) {
+        return res.status(409).json({ error: 'Profile type name already exists.' });
       }
       return res.status(500).json({ error: err.message });
     }
     if (this.changes === 0) return res.status(404).json({ error: 'Profile type not found.' });
-    db.get(`SELECT id, name, status, created_at FROM profile_types WHERE id = ?`, [id], (err2, row) => {
+
+    db.get(`SELECT * FROM profile_types WHERE id = ?`, [id], (err2, row) => {
       if (err2) return res.status(500).json({ error: err2.message });
       return res.json(row);
     });
@@ -413,7 +518,7 @@ app.get(
     try {
       const limit = Math.max(1, Math.min(200, Number(req.query.limit || 20)));
       const result = await es.search({
-        index: ["filebeat-*", ".ds-filebeat-*"],  // cover indices & data streams
+        index: ["filebeat-*", ".ds-filebeat-*"],
         size: limit,
         sort: [{ "@timestamp": { order: "desc" } }],
         track_total_hits: false,
@@ -437,26 +542,26 @@ app.get(
 
       const alerts = result.hits.hits.map((h) => ({
         id: h._id,
-        timestamp: h._source?.["@timestamp"],
-        signature: h._source?.suricata?.eve?.alert?.signature,
-        severity: h._source?.suricata?.eve?.alert?.severity,
-        src_ip: h._source?.source?.ip,
-        src_port: h._source?.source?.port,
-        dest_ip: h._source?.destination?.ip,
-        dest_port: h._source?.destination?.port,
-        protocol: h._source?.network?.protocol,
+        timestamp: h._source?.["@timestamp"] || "",
+        signature: h._source?.suricata?.eve?.alert?.signature || "Unknown",
+        severity: h._source?.suricata?.eve?.alert?.severity || 3,
+        src_ip: h._source?.source?.ip || "",
+        src_port: h._source?.source?.port || 0,
+        dest_ip: h._source?.destination?.ip || "",
+        dest_port: h._source?.destination?.port || 0,
+        protocol: h._source?.network?.protocol || "",
       }));
 
       res.json(alerts);
     } catch (err) {
-      console.error("[/api/suricata/alerts] ES error:", err?.meta?.body || err);
-      res.status(500).json({ error: "ES query failed" });
+      console.error("[GET /api/suricata/alerts] ES error:", err);
+      res.status(500).json({ error: "Failed to fetch Suricata alerts" });
     }
   }
 );
 
 // GET /api/zeek/logs?limit=20
-// ⭐ FIXED: Now parses raw TSV message when structured fields are missing
+// Returns recent Zeek logs from Elasticsearch
 app.get(
   "/api/zeek/logs",
   authorize(["Platform Administrator", "Security Analyst"]),
@@ -468,68 +573,47 @@ app.get(
         size: limit,
         sort: [{ "@timestamp": { order: "desc" } }],
         track_total_hits: false,
-        query: { match: { "event.module": "zeek" } },
+        query: {
+          bool: {
+            must: [{ match: { "event.module": "zeek" } }],
+          },
+        },
         _source: [
           "@timestamp",
-          "message",
-          "event.dataset",
-          "zeek.session_id",
-          "source.ip",
-          "source.port",
-          "destination.ip",
-          "destination.port",
-          "network.transport"
+          "zeek.connection.id_orig_h",
+          "zeek.connection.id_orig_p",
+          "zeek.connection.id_resp_h",
+          "zeek.connection.id_resp_p",
+          "zeek.connection.proto",
+          "zeek.connection.service",
+          "zeek.connection.conn_state",
         ],
       });
 
-      const logs = result.hits.hits.map((h) => {
-        const src = h._source;
-
-        // Try structured fields first
-        let src_ip = src?.source?.ip;
-        let src_port = src?.source?.port;
-        let dest_ip = src?.destination?.ip;
-        let dest_port = src?.destination?.port;
-        let proto = src?.network?.transport;
-        let service = "—";
-
-        // If structured fields are missing, parse the raw TSV message
-        if (!src_ip && src?.message) {
-          const parts = src.message.split("\t");
-          // TSV format: ts uid orig_h orig_p resp_h resp_p proto service ...
-          if (parts.length >= 8) {
-            src_ip = parts[2];
-            src_port = parts[3];
-            dest_ip = parts[4];
-            dest_port = parts[5];
-            proto = parts[6];
-            service = parts[7];
-          }
-        }
-
-        return {
-          id: h._id,
-          timestamp: src?.["@timestamp"],
-          event_type: (src?.event?.dataset || "").replace("zeek.", "") || "connection",
-          service: service,
-          src_ip: src_ip || "—",
-          src_port: src_port || "—",
-          dest_ip: dest_ip || "—",
-          dest_port: dest_port || "—",
-          proto: proto || "—",
-        };
-      });
+      const logs = result.hits.hits.map((h) => ({
+        id: h._id,
+        timestamp: h._source?.["@timestamp"] || "",
+        src_ip: h._source?.zeek?.connection?.id_orig_h || "",
+        src_port: h._source?.zeek?.connection?.id_orig_p || 0,
+        dest_ip: h._source?.zeek?.connection?.id_resp_h || "",
+        dest_port: h._source?.zeek?.connection?.id_resp_p || 0,
+        protocol: h._source?.zeek?.connection?.proto || "",
+        service: h._source?.zeek?.connection?.service || "",
+        conn_state: h._source?.zeek?.connection?.conn_state || "",
+      }));
 
       res.json(logs);
     } catch (err) {
-      console.error("[/api/zeek/logs] ES error:", err?.meta?.body || err);
-      res.status(500).json({ error: "ES query failed" });
+      console.error("[GET /api/zeek/logs] ES error:", err);
+      res.status(500).json({ error: "Failed to fetch Zeek logs" });
     }
   }
 );
 
-
+// =========================================================
+// START SERVER
+// =========================================================
 app.listen(PORT, () => {
-  console.log(`Server is running on http://0.0.0.0:${PORT}`);
-  console.log(`JWT roles enforced. ES at ${ELASTIC_URL}`);
+  console.log(`✅ User API listening on http://localhost:${PORT}`);
+  console.log(`✅ Elasticsearch node: ${ELASTIC_URL}`);
 });
