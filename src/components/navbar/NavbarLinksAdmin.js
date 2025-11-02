@@ -74,6 +74,8 @@ export default function HeaderLinks(props) {
       logout?.();
     } catch {}
     localStorage.removeItem('token');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('syntra_token');
     localStorage.removeItem('user');
     localStorage.removeItem('syntra_user');
     navigate('/auth/sign-in', { replace: true });
