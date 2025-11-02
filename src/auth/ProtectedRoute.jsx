@@ -6,8 +6,8 @@ export default function ProtectedRoute({ roles = [] }) {
   const { isAuthenticated, hasRole } = useAuth();
   const loc = useLocation();
 
-  const authed = Boolean(isAuthenticated || localStorage.getItem("accessToken"));
-  if (!authed) {
+  // REMOVE the localStorage fallback - rely only on AuthContext
+  if (!isAuthenticated) {
     return <Navigate to="/auth/sign-in" replace state={{ from: loc }} />;
   }
 

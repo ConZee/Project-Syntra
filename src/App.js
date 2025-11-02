@@ -2,7 +2,7 @@ import "./assets/css/App.css";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { ChakraProvider } from "@chakra-ui/react";
 import initialTheme from "./theme/theme";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import AuthLayout from "./layouts/auth";
 import AdminLayout from "./layouts/admin";
@@ -32,6 +32,16 @@ function DefaultRedirect() {
 
 export default function Main() {
   const [currentTheme, setCurrentTheme] = useState(initialTheme);
+
+  // ONE-TIME CLEANUP: Remove old token keys
+  useEffect(() => {
+    // Check if old keys exist
+    if (localStorage.getItem('syntra_token') || localStorage.getItem('syntra_user')) {
+      localStorage.removeItem('syntra_token');
+      localStorage.removeItem('syntra_user');
+      console.log('Cleaned up old authentication keys');
+    }
+  }, []);
 
   return (
     <ChakraProvider theme={currentTheme}>

@@ -1,13 +1,44 @@
 // src/auth/AuthContext.jsx
 import React, { createContext, useContext, useMemo, useState } from "react";
 
+// Helper function to check if token is expired
+function isTokenExpired(token) {
+  if (!token) return true;
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const expiry = payload.exp * 1000; // Convert to milliseconds
+    return Date.now() >= expiry;
+  } catch (e) {
+    console.error('Error parsing token:', e);
+    return true;
+  }
+}
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [accessToken, setAccessToken] = useState(() => localStorage.getItem("accessToken"));
+  const [accessToken, setAccessToken] = useState(() => {
+    const token = localStorage.getItem("accessToken");
+    // Clear if expired
+    if (token && isTokenExpired(token)) {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+      return null;
+    }
+    return token;
+  });
+
   const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem("user");
-    return raw ? JSON.parse(raw) : null;
+    const token = localStorage.getItem("accessToken");
+    // Only load user if token is valid
+    if (token && !isTokenExpired(token)) {
+      const raw = localStorage.getItem("user");
+      return raw ? JSON.parse(raw) : null;
+    }
+    // Clear invalid data
+    localStorage.removeItem("user");
+    return null;
   });
 
   const login = (token, u) => {
@@ -22,6 +53,9 @@ export function AuthProvider({ children }) {
     setUser(null);
     localStorage.removeItem("accessToken");
     localStorage.removeItem("user");
+    // Also clear old keys if they exist
+    localStorage.removeItem("syntra_token");
+    localStorage.removeItem("syntra_user");
   };
 
   const hasRole = (roles = []) => {
@@ -31,7 +65,14 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ user, accessToken, login, logout, isAuthenticated: !!accessToken, hasRole }),
+    () => ({
+      user,
+      accessToken,
+      login,
+      logout,
+      isAuthenticated: !!accessToken && !isTokenExpired(accessToken),
+      hasRole
+    }),
     [user, accessToken]
   );
 

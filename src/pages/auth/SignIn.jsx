@@ -86,8 +86,9 @@ function SignIn() {
       const { token, user } = await res.json();
 
       // Persist for refreshes / sidebar profile
-      localStorage.setItem('syntra_user', JSON.stringify(user));
-      localStorage.setItem('syntra_token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('accessToken', token);
+
 
       // If your AuthContext expects token + user
       login?.(token, user);
