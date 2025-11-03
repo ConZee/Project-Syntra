@@ -512,7 +512,7 @@ export default function NetworkAdminDashboard() {
         {modules.map((module) => {
           const IconComponent = module.icon;
           const isDragged = draggedModuleId === module.id;
-          the isDragTarget = dragOverId === module.id;
+          const isDragTarget = dragOverId === module.id;
 
           return (
             <Card
