@@ -1,5 +1,5 @@
 // ============================================================================
-// src/pages/networkAdmin/Dashboard.jsx 
+// src/pages/networkAdmin/Dashboard.jsx
 // ============================================================================
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -10,10 +10,12 @@ import {
   HStack,
   Icon,
   SimpleGrid,
+  Spinner,
   Stack,
   Text,
   Tooltip,
   useColorModeValue,
+  useToast,
 } from '@chakra-ui/react';
 import Card from 'components/card/Card';
 import IconBox from 'components/icons/IconBox';
@@ -29,277 +31,341 @@ import {
   MdTrendingUp,
   MdTimeline,
 } from 'react-icons/md';
+import { getSuricataAlerts, getIDSRules } from '../../backend_api';
+import { useAuth } from '../../auth/AuthContext';
+import GeoMap from 'components/charts/GeoMap';
 
 const STORAGE_KEY = 'networkAdmin-dashboard-layout';
 const DATA_TRANSFER_TYPE = 'networkAdmin/module-id';
 
-// Static placeholder metrics shown on the dashboard until wired to live API
-// responses. Keeping them centralized makes it clear these values are mocked.
-const SUMMARY_METRICS = [
-  {
-    label: 'Active Alerts',
-    value: '24',
-    icon: MdBarChart,
-  },
-  {
-    label: 'Managed IDS Rules',
-    value: '156',
-    icon: MdDashboard,
-  },
-  {
-    label: 'Connected Sensors',
-    value: '3',
-    icon: MdDeviceHub,
-  },
-  {
-    label: 'Pending Actions',
-    value: '8',
-    icon: MdTimeline,
-  },
-];
+// Map Suricata alert severity (1=High, 2=Medium, 3=Low)
+const getSeverityColor = (severity) => {
+  if (!severity) return 'gray';
+  const sev = String(severity);
+  if (sev === '1') return 'red';
+  if (sev === '2') return 'orange';
+  if (sev === '3') return 'yellow';
+  return 'gray';
+};
 
-// Mock data used to render the dashboard modules while backend integrations
-// are still being wired up. Each module references these collections so it is
-// obvious the values are placeholders rather than live telemetry.
-const SAMPLE_ALERTS = [
-  {
-    id: 'ALRT-9082',
-    summary: 'High severity threat detected',
-    detail: 'Exploit attempt blocked on DMZ web server',
-    severity: 'High',
-  },
-  {
-    id: 'ALRT-9079',
-    summary: 'New lateral movement behavior',
-    detail: 'Unusual SMB connections from HR subnet',
-    severity: 'Medium',
-  },
-  {
-    id: 'ALRT-9074',
-    summary: 'Suspicious DNS tunneling activity',
-    detail: 'Outbound queries to untrusted domain',
-    severity: 'Medium',
-  },
-];
+const getSeverityLabel = (severity) => {
+  if (!severity) return 'Unknown';
+  const sev = String(severity);
+  if (sev === '1') return 'High';
+  if (sev === '2') return 'Medium';
+  if (sev === '3') return 'Low';
+  return 'Unknown';
+};
 
-const SAMPLE_THREATS = [
-  { name: 'Ransomware: STOP.DJVU', count: 18, trend: '+12%', color: 'red' },
-  { name: 'Botnet: MIRAI', count: 11, trend: '+4%', color: 'orange' },
-  { name: 'Recon: Port Sweep', count: 9, trend: '-3%', color: 'yellow' },
-];
-
-const SAMPLE_ACTIVITY = [
-  {
-    time: '08:24',
-    text: 'Rule "Critical SQL Injection" updated by A. Moreno',
-  },
-  { time: '07:58', text: 'New IDS source onboarding started (Zeek-DC2)' },
-  { time: '07:41', text: 'Alert severity adjusted for anomaly policy' },
-];
-
-const SAMPLE_SEVERITY_BUCKETS = [
-  { label: 'Critical', value: 8, total: 120, color: 'red.400' },
-  { label: 'High', value: 22, total: 120, color: 'orange.400' },
-  { label: 'Medium', value: 56, total: 120, color: 'yellow.400' },
-  { label: 'Low', value: 34, total: 120, color: 'green.400' },
-];
+// Helper function to format timestamp
+const formatTime = (timestamp) => {
+  if (!timestamp) return '—';
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '—';
+  }
+};
 
 const MODULE_LIBRARY = {
   alerts: {
     id: 'alerts',
     title: 'Real-time Alerts',
     icon: MdAlarm,
-    render: (colors) => (
-      <Stack spacing={3}>
-        {SAMPLE_ALERTS.map((alert) => (
-          <Flex key={alert.id} justify="space-between" align="flex-start">
-            <Box>
-              <Text fontWeight="600" color={colors.textPrimary}>
-                {alert.summary}
-              </Text>
-              <Text fontSize="sm" color={colors.textSecondary}>
-                {alert.detail}
-              </Text>
-              <Text fontSize="xs" mt={1} color={colors.textTertiary}>
-                Alert ID: {alert.id}
-              </Text>
-            </Box>
-            <Badge
-              colorScheme={
-                alert.severity === 'High'
-                  ? 'red'
-                  : alert.severity === 'Medium'
-                    ? 'orange'
-                    : 'green'
-              }
-              variant="subtle"
-            >
-              {alert.severity}
-            </Badge>
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+      const loading = data.loading;
+
+      if (loading) {
+        return (
+          <Flex justify="center" align="center" minH="120px">
+            <Spinner size="lg" />
           </Flex>
-        ))}
-      </Stack>
-    ),
-  },
-  traffic: {
-    id: 'traffic',
-    title: 'Network Traffic Overview',
-    icon: MdTrendingUp,
-    render: (colors) => (
-      <Stack spacing={4}>
-        <Flex justify="space-between">
-          <Text fontWeight="600" color={colors.textPrimary}>
-            Throughput
+        );
+      }
+
+      if (alerts.length === 0) {
+        return (
+          <Text color={colors.textSecondary} textAlign="center" py={4}>
+            No recent alerts
           </Text>
-          <Text color={colors.textSecondary}>3.2 Gbps</Text>
-        </Flex>
-        <Box h="6px" borderRadius="8px" bg={colors.trackBg}>
-          <Box h="100%" w="70%" borderRadius="inherit" bg="brand.500" />
-        </Box>
-        <Flex justify="space-between" fontSize="sm" color={colors.textSecondary}>
-          <Box>
-            <Text fontWeight="600">Northbound</Text>
-            <Text>1.8 Gbps</Text>
-          </Box>
-          <Box>
-            <Text fontWeight="600">Southbound</Text>
-            <Text>1.4 Gbps</Text>
-          </Box>
-          <Box>
-            <Text fontWeight="600">Packets/s</Text>
-            <Text>86.4 k</Text>
-          </Box>
-        </Flex>
-      </Stack>
-    ),
+        );
+      }
+
+      return (
+        <Stack spacing={3}>
+          {alerts.slice(0, 5).map((alert) => (
+            <Flex key={alert.id} justify="space-between" align="flex-start">
+              <Box flex="1">
+                <Text fontWeight="600" color={colors.textPrimary} noOfLines={1}>
+                  {alert.signature || 'Unknown Alert'}
+                </Text>
+                <Text fontSize="sm" color={colors.textSecondary}>
+                  {alert.src_ip || '—'} → {alert.dest_ip || '—'}
+                  {alert.dest_port ? `:${alert.dest_port}` : ''}
+                </Text>
+                <Text fontSize="xs" mt={1} color={colors.textTertiary}>
+                  {formatTime(alert.timestamp)} | {alert.protocol || 'N/A'}
+                </Text>
+              </Box>
+              <Badge
+                colorScheme={getSeverityColor(alert.severity)}
+                variant="subtle"
+                ml={2}
+              >
+                {getSeverityLabel(alert.severity)}
+              </Badge>
+            </Flex>
+          ))}
+        </Stack>
+      );
+    },
+  },
+  geomap: {
+    id: 'geomap',
+    title: 'Threat Geolocation',
+    icon: MdDeviceHub,
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+      return <GeoMap alerts={alerts} />;
+    },
   },
   threats: {
     id: 'threats',
     title: 'Top Threats',
     icon: MdSecurity,
-    render: (colors) => (
-      <Stack spacing={3}>
-        {SAMPLE_THREATS.map((threat) => (
-          <Flex
-            key={threat.name}
-            justify="space-between"
-            align="center"
-            borderRadius="12px"
-            px={3}
-            py={2}
-            bg={colors.subtleBg}
-          >
-            <Box>
-              <Text fontWeight="600" color={colors.textPrimary}>
-                {threat.name}
-              </Text>
-              <Text fontSize="sm" color={colors.textSecondary}>
-                {threat.count} detections this week
-              </Text>
-            </Box>
-            <Badge colorScheme={threat.color} fontSize="0.75rem">
-              {threat.trend}
-            </Badge>
-          </Flex>
-        ))}
-      </Stack>
-    ),
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+
+      // Group alerts by signature and count them
+      const threatCounts = {};
+      alerts.forEach(alert => {
+        const sig = alert.signature || 'Unknown';
+        if (!threatCounts[sig]) {
+          threatCounts[sig] = { name: sig, count: 0, severity: alert.severity };
+        }
+        threatCounts[sig].count++;
+      });
+
+      // Sort by count and take top 5
+      const topThreats = Object.values(threatCounts)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      if (topThreats.length === 0) {
+        return (
+          <Text color={colors.textSecondary} textAlign="center" py={4}>
+            No threats detected
+          </Text>
+        );
+      }
+
+      return (
+        <Stack spacing={3}>
+          {topThreats.map((threat, idx) => (
+            <Flex
+              key={idx}
+              justify="space-between"
+              align="center"
+              borderRadius="12px"
+              px={3}
+              py={2}
+              bg={colors.subtleBg}
+            >
+              <Box flex="1">
+                <Text fontWeight="600" color={colors.textPrimary} noOfLines={1}>
+                  {threat.name}
+                </Text>
+                <Text fontSize="sm" color={colors.textSecondary}>
+                  {threat.count} detection{threat.count !== 1 ? 's' : ''}
+                </Text>
+              </Box>
+              <Badge colorScheme={getSeverityColor(threat.severity)} fontSize="0.75rem" ml={2}>
+                {getSeverityLabel(threat.severity)}
+              </Badge>
+            </Flex>
+          ))}
+        </Stack>
+      );
+    },
   },
   system: {
     id: 'system',
     title: 'System Health',
     icon: MdDeviceHub,
-    render: (colors) => (
-      <Stack spacing={4}>
-        {[
-          { label: 'Sensor Availability', value: 96, color: 'green.400' },
-          { label: 'Log Ingestion', value: 82, color: 'brand.500' },
-          { label: 'Correlator Queue', value: 64, color: 'orange.400' },
-        ].map((metric) => (
-          <Box key={metric.label}>
-            <Flex justify="space-between" fontSize="sm" mb={1} color={colors.textSecondary}>
-              <Text fontWeight="600" color={colors.textPrimary}>
-                {metric.label}
-              </Text>
-              <Text>{metric.value}%</Text>
-            </Flex>
-            <Box h="6px" borderRadius="8px" bg={colors.trackBg}>
-              <Box
-                h="100%"
-                w={`${metric.value}%`}
-                borderRadius="inherit"
-                bg={metric.color}
-                transition="width 0.2s ease"
-              />
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+      const ruleCount = data.ruleCount || 0;
+
+      // Simple health metrics based on alert activity
+      const recentAlerts = alerts.filter(a => {
+        const alertTime = new Date(a.timestamp);
+        const now = new Date();
+        return (now - alertTime) < 5 * 60 * 1000; // Last 5 minutes
+      }).length;
+
+      const healthMetrics = [
+        {
+          label: 'IDS Rules Active',
+          value: Math.min(100, (ruleCount / 200) * 100),
+          color: 'green.400',
+          display: ruleCount
+        },
+        {
+          label: 'Alert Flow Rate',
+          value: Math.min(100, (recentAlerts / 10) * 100),
+          color: recentAlerts > 20 ? 'red.400' : 'brand.500',
+          display: `${recentAlerts}/5min`
+        },
+        {
+          label: 'System Status',
+          value: alerts.length > 0 ? 95 : 100,
+          color: alerts.length > 50 ? 'orange.400' : 'green.400',
+          display: 'Operational'
+        },
+      ];
+
+      return (
+        <Stack spacing={4}>
+          {healthMetrics.map((metric) => (
+            <Box key={metric.label}>
+              <Flex justify="space-between" fontSize="sm" mb={1} color={colors.textSecondary}>
+                <Text fontWeight="600" color={colors.textPrimary}>
+                  {metric.label}
+                </Text>
+                <Text>{metric.display || `${Math.round(metric.value)}%`}</Text>
+              </Flex>
+              <Box h="6px" borderRadius="8px" bg={colors.trackBg}>
+                <Box
+                  h="100%"
+                  w={`${metric.value}%`}
+                  borderRadius="inherit"
+                  bg={metric.color}
+                  transition="width 0.2s ease"
+                />
+              </Box>
             </Box>
-          </Box>
-        ))}
-      </Stack>
-    ),
+          ))}
+        </Stack>
+      );
+    },
   },
   activity: {
     id: 'activity',
-    title: 'Recent Activities',
+    title: 'Recent Activity',
     icon: MdTimeline,
-    render: (colors) => (
-      <Stack spacing={3}>
-        {SAMPLE_ACTIVITY.map((event) => (
-          <Flex key={event.time} align="center" gap={3}>
-            <Box
-              minW="56px"
-              textAlign="center"
-              fontSize="xs"
-              fontWeight="700"
-              color={colors.textPrimary}
-              bg={colors.subtleBg}
-              borderRadius="10px"
-              py={1}
-            >
-              {event.time}
-            </Box>
-            <Text fontSize="sm" color={colors.textSecondary}>
-              {event.text}
-            </Text>
-          </Flex>
-        ))}
-      </Stack>
-    ),
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+
+      // Show last 5 alerts as activity
+      const recentActivity = alerts.slice(0, 5).map(alert => ({
+        time: formatTime(alert.timestamp),
+        text: `${getSeverityLabel(alert.severity)} alert: ${alert.signature || 'Unknown'}`,
+        severity: alert.severity
+      }));
+
+      if (recentActivity.length === 0) {
+        return (
+          <Text color={colors.textSecondary} textAlign="center" py={4}>
+            No recent activity
+          </Text>
+        );
+      }
+
+      return (
+        <Stack spacing={3}>
+          {recentActivity.map((event, idx) => (
+            <Flex key={idx} align="center" gap={3}>
+              <Box
+                minW="56px"
+                textAlign="center"
+                fontSize="xs"
+                fontWeight="700"
+                color={colors.textPrimary}
+                bg={colors.subtleBg}
+                borderRadius="10px"
+                py={1}
+              >
+                {event.time}
+              </Box>
+              <Text fontSize="sm" color={colors.textSecondary} flex="1" noOfLines={2}>
+                {event.text}
+              </Text>
+            </Flex>
+          ))}
+        </Stack>
+      );
+    },
   },
   severity: {
     id: 'severity',
     title: 'Alert Severity Distribution',
     icon: MdBarChart,
-    render: (colors) => (
-      <Stack spacing={3}>
-        {SAMPLE_SEVERITY_BUCKETS.map((bucket) => (
-          <Box key={bucket.label}>
-            <Flex justify="space-between" fontSize="sm" color={colors.textSecondary}>
-              <Text fontWeight="600" color={colors.textPrimary}>
-                {bucket.label}
-              </Text>
-              <Text>
-                {bucket.value} alerts ({Math.round((bucket.value / bucket.total) * 100)}%)
-              </Text>
-            </Flex>
-            <Box h="6px" borderRadius="8px" bg={colors.trackBg}>
-              <Box
-                h="100%"
-                w={`${(bucket.value / bucket.total) * 100}%`}
-                borderRadius="inherit"
-                bg={bucket.color}
-                transition="width 0.2s ease"
-              />
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+
+      // Calculate severity distribution
+      const severityCounts = { '1': 0, '2': 0, '3': 0, 'unknown': 0 };
+      alerts.forEach(alert => {
+        const sev = String(alert.severity || 'unknown');
+        if (severityCounts.hasOwnProperty(sev)) {
+          severityCounts[sev]++;
+        } else {
+          severityCounts['unknown']++;
+        }
+      });
+
+      const total = alerts.length || 1;
+      const buckets = [
+        { label: 'High', value: severityCounts['1'], total, color: 'red.400' },
+        { label: 'Medium', value: severityCounts['2'], total, color: 'orange.400' },
+        { label: 'Low', value: severityCounts['3'], total, color: 'yellow.400' },
+      ];
+
+      if (total === 1 && alerts.length === 0) {
+        return (
+          <Text color={colors.textSecondary} textAlign="center" py={4}>
+            No alerts to analyze
+          </Text>
+        );
+      }
+
+      return (
+        <Stack spacing={3}>
+          {buckets.map((bucket) => (
+            <Box key={bucket.label}>
+              <Flex justify="space-between" fontSize="sm" color={colors.textSecondary}>
+                <Text fontWeight="600" color={colors.textPrimary}>
+                  {bucket.label}
+                </Text>
+                <Text>
+                  {bucket.value} alert{bucket.value !== 1 ? 's' : ''} ({Math.round((bucket.value / bucket.total) * 100)}%)
+                </Text>
+              </Flex>
+              <Box h="6px" borderRadius="8px" bg={colors.trackBg}>
+                <Box
+                  h="100%"
+                  w={`${(bucket.value / bucket.total) * 100}%`}
+                  borderRadius="inherit"
+                  bg={bucket.color}
+                  transition="width 0.2s ease"
+                />
+              </Box>
             </Box>
-          </Box>
-        ))}
-      </Stack>
-    ),
+          ))}
+        </Stack>
+      );
+    },
   },
 };
 
 const DEFAULT_ORDER = Object.keys(MODULE_LIBRARY);
 
 export default function NetworkAdminDashboard() {
+  const toast = useToast();
+  const { isAuthenticated } = useAuth();
+
   const brandColor = useColorModeValue('brand.500', 'white');
   const boxBg = useColorModeValue('secondaryGray.300', 'whiteAlpha.100');
   const textColor = useColorModeValue('secondaryGray.900', 'white');
@@ -310,6 +376,11 @@ export default function NetworkAdminDashboard() {
   const textSecondary = useColorModeValue('secondaryGray.700', 'whiteAlpha.700');
   const textTertiary = useColorModeValue('secondaryGray.500', 'whiteAlpha.500');
 
+  // Real-time data state
+  const [alerts, setAlerts] = useState([]);
+  const [ruleCount, setRuleCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+
   const colors = useMemo(
     () => ({
       textPrimary: textColor,
@@ -319,6 +390,88 @@ export default function NetworkAdminDashboard() {
       trackBg,
     }),
     [subtleBg, textColor, textSecondary, textTertiary, trackBg],
+  );
+
+  // Fetch real-time data
+  const fetchDashboardData = useCallback(async () => {
+    if (!isAuthenticated) return;
+
+    try {
+      setLoading(true);
+      const [alertsData, rulesData] = await Promise.all([
+        getSuricataAlerts(100),
+        getIDSRules(),
+      ]);
+
+      setAlerts(alertsData || []);
+      setRuleCount(rulesData?.length || 0);
+    } catch (err) {
+      console.error('Dashboard data fetch error:', err);
+      if (err.message.includes('401') || err.message.includes('403')) {
+        // Don't show error for auth issues
+        return;
+      }
+      toast({
+        title: 'Failed to load dashboard data',
+        description: err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, toast]);
+
+  // Poll for updates every 5 seconds
+  useEffect(() => {
+    fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 5000);
+    return () => clearInterval(interval);
+  }, [fetchDashboardData]);
+
+  // Computed metrics
+  const summaryMetrics = useMemo(() => {
+    const activeAlerts = alerts.filter(a => {
+      const alertTime = new Date(a.timestamp);
+      const now = new Date();
+      return (now - alertTime) < 60 * 60 * 1000; // Last hour
+    }).length;
+
+    const pendingActions = alerts.filter(a => a.severity === 1 || a.severity === '1').length;
+
+    return [
+      {
+        label: 'Active Alerts',
+        value: String(activeAlerts),
+        icon: MdAlarm,
+      },
+      {
+        label: 'Managed IDS Rules',
+        value: String(ruleCount),
+        icon: MdDashboard,
+      },
+      {
+        label: 'Total Alerts',
+        value: String(alerts.length),
+        icon: MdBarChart,
+      },
+      {
+        label: 'High Severity',
+        value: String(pendingActions),
+        icon: MdSecurity,
+      },
+    ];
+  }, [alerts, ruleCount]);
+
+  // Module data
+  const moduleData = useMemo(
+    () => ({
+      alerts,
+      ruleCount,
+      loading,
+    }),
+    [alerts, ruleCount, loading],
   );
 
   const [moduleOrder, setModuleOrder] = useState(() => {
@@ -461,7 +614,7 @@ export default function NetworkAdminDashboard() {
           <Stack spacing={1} color={textSecondary} fontSize="sm">
             <Text>Reorder the modules below to craft a workspace that matches your workflow.</Text>
             <Text fontStyle="italic" color={textTertiary}>
-              Sample data is shown while live telemetry integrations are in progress.
+              Real-time data updates every 5 seconds {loading && '(Loading...)'}
             </Text>
           </Stack>
         </Box>
@@ -485,7 +638,7 @@ export default function NetworkAdminDashboard() {
       </Flex>
 
       <SimpleGrid columns={{ base: 1, md: 2, xl: 4 }} gap="20px" mb="20px">
-        {SUMMARY_METRICS.map((metric) => (
+        {summaryMetrics.map((metric) => (
           <Card key={metric.label} py="15px" bg={cardBg}>
             <Box display="flex" alignItems="center">
               <IconBox
@@ -574,7 +727,7 @@ export default function NetworkAdminDashboard() {
                   </Tooltip>
                 ) : null}
               </Flex>
-              {module.render(colors)}
+              {module.render(colors, moduleData)}
             </Card>
           );
         })}
