@@ -18,7 +18,6 @@ import {
 import Card from 'components/card/Card';
 import IconBox from 'components/icons/IconBox';
 import {
-  MdActivity,
   MdAlarm,
   MdBarChart,
   MdCheck,
@@ -28,6 +27,7 @@ import {
   MdOutlineEdit,
   MdSecurity,
   MdTrendingUp,
+  MdTimeline,
 } from 'react-icons/md';
 
 const STORAGE_KEY = 'networkAdmin-dashboard-layout';
@@ -99,7 +99,7 @@ const MODULE_LIBRARY = {
           <Text fontWeight="600" color={colors.textPrimary}>
             Throughput
           </Text>
-            <Text color={colors.textSecondary}>3.2 Gbps</Text>
+          <Text color={colors.textSecondary}>3.2 Gbps</Text>
         </Flex>
         <Box h="6px" borderRadius="8px" bg={colors.trackBg}>
           <Box h="100%" w="70%" borderRadius="inherit" bg="brand.500" />
@@ -197,7 +197,7 @@ const MODULE_LIBRARY = {
   activity: {
     id: 'activity',
     title: 'Recent Activities',
-    icon: MdActivity,
+    icon: MdTimeline,
     render: (colors) => (
       <Stack spacing={3}>
         {[
@@ -495,7 +495,7 @@ export default function NetworkAdminDashboard() {
 
         <Card py="15px" bg={cardBg}>
           <Box display="flex" alignItems="center">
-            <IconBox w="56px" h="56px" bg={boxBg} icon={<MdActivity size="28px" color={brandColor} />} />
+            <IconBox w="56px" h="56px" bg={boxBg} icon={<MdTimeline size="28px" color={brandColor} />} />
             <Box ml="18px">
               <Text color="secondaryGray.600" fontSize="sm" fontWeight="500" mb="4px">
                 Pending Actions
@@ -512,7 +512,7 @@ export default function NetworkAdminDashboard() {
         {modules.map((module) => {
           const IconComponent = module.icon;
           const isDragged = draggedModuleId === module.id;
-          const isDragTarget = dragOverId === module.id;
+          the isDragTarget = dragOverId === module.id;
 
           return (
             <Card
