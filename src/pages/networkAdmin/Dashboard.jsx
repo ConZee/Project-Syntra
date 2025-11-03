@@ -33,6 +33,77 @@ import {
 const STORAGE_KEY = 'networkAdmin-dashboard-layout';
 const DATA_TRANSFER_TYPE = 'networkAdmin/module-id';
 
+// Static placeholder metrics shown on the dashboard until wired to live API
+// responses. Keeping them centralized makes it clear these values are mocked.
+const SUMMARY_METRICS = [
+  {
+    label: 'Active Alerts',
+    value: '24',
+    icon: MdBarChart,
+  },
+  {
+    label: 'Managed IDS Rules',
+    value: '156',
+    icon: MdDashboard,
+  },
+  {
+    label: 'Connected Sensors',
+    value: '3',
+    icon: MdDeviceHub,
+  },
+  {
+    label: 'Pending Actions',
+    value: '8',
+    icon: MdTimeline,
+  },
+];
+
+// Mock data used to render the dashboard modules while backend integrations
+// are still being wired up. Each module references these collections so it is
+// obvious the values are placeholders rather than live telemetry.
+const SAMPLE_ALERTS = [
+  {
+    id: 'ALRT-9082',
+    summary: 'High severity threat detected',
+    detail: 'Exploit attempt blocked on DMZ web server',
+    severity: 'High',
+  },
+  {
+    id: 'ALRT-9079',
+    summary: 'New lateral movement behavior',
+    detail: 'Unusual SMB connections from HR subnet',
+    severity: 'Medium',
+  },
+  {
+    id: 'ALRT-9074',
+    summary: 'Suspicious DNS tunneling activity',
+    detail: 'Outbound queries to untrusted domain',
+    severity: 'Medium',
+  },
+];
+
+const SAMPLE_THREATS = [
+  { name: 'Ransomware: STOP.DJVU', count: 18, trend: '+12%', color: 'red' },
+  { name: 'Botnet: MIRAI', count: 11, trend: '+4%', color: 'orange' },
+  { name: 'Recon: Port Sweep', count: 9, trend: '-3%', color: 'yellow' },
+];
+
+const SAMPLE_ACTIVITY = [
+  {
+    time: '08:24',
+    text: 'Rule "Critical SQL Injection" updated by A. Moreno',
+  },
+  { time: '07:58', text: 'New IDS source onboarding started (Zeek-DC2)' },
+  { time: '07:41', text: 'Alert severity adjusted for anomaly policy' },
+];
+
+const SAMPLE_SEVERITY_BUCKETS = [
+  { label: 'Critical', value: 8, total: 120, color: 'red.400' },
+  { label: 'High', value: 22, total: 120, color: 'orange.400' },
+  { label: 'Medium', value: 56, total: 120, color: 'yellow.400' },
+  { label: 'Low', value: 34, total: 120, color: 'green.400' },
+];
+
 const MODULE_LIBRARY = {
   alerts: {
     id: 'alerts',
@@ -40,26 +111,7 @@ const MODULE_LIBRARY = {
     icon: MdAlarm,
     render: (colors) => (
       <Stack spacing={3}>
-        {[
-          {
-            id: 'ALRT-9082',
-            summary: 'High severity threat detected',
-            detail: 'Exploit attempt blocked on DMZ web server',
-            severity: 'High',
-          },
-          {
-            id: 'ALRT-9079',
-            summary: 'New lateral movement behavior',
-            detail: 'Unusual SMB connections from HR subnet',
-            severity: 'Medium',
-          },
-          {
-            id: 'ALRT-9074',
-            summary: 'Suspicious DNS tunneling activity',
-            detail: 'Outbound queries to untrusted domain',
-            severity: 'Medium',
-          },
-        ].map((alert) => (
+        {SAMPLE_ALERTS.map((alert) => (
           <Flex key={alert.id} justify="space-between" align="flex-start">
             <Box>
               <Text fontWeight="600" color={colors.textPrimary}>
@@ -127,16 +179,7 @@ const MODULE_LIBRARY = {
     icon: MdSecurity,
     render: (colors) => (
       <Stack spacing={3}>
-        {[
-          {
-            name: 'Ransomware: STOP.DJVU',
-            count: 18,
-            trend: '+12%',
-            color: 'red',
-          },
-          { name: 'Botnet: MIRAI', count: 11, trend: '+4%', color: 'orange' },
-          { name: 'Recon: Port Sweep', count: 9, trend: '-3%', color: 'yellow' },
-        ].map((threat) => (
+        {SAMPLE_THREATS.map((threat) => (
           <Flex
             key={threat.name}
             justify="space-between"
@@ -200,14 +243,7 @@ const MODULE_LIBRARY = {
     icon: MdTimeline,
     render: (colors) => (
       <Stack spacing={3}>
-        {[
-          {
-            time: '08:24',
-            text: 'Rule "Critical SQL Injection" updated by A. Moreno',
-          },
-          { time: '07:58', text: 'New IDS source onboarding started (Zeek-DC2)' },
-          { time: '07:41', text: 'Alert severity adjusted for anomaly policy' },
-        ].map((event) => (
+        {SAMPLE_ACTIVITY.map((event) => (
           <Flex key={event.time} align="center" gap={3}>
             <Box
               minW="56px"
@@ -235,12 +271,7 @@ const MODULE_LIBRARY = {
     icon: MdBarChart,
     render: (colors) => (
       <Stack spacing={3}>
-        {[
-          { label: 'Critical', value: 8, total: 120, color: 'red.400' },
-          { label: 'High', value: 22, total: 120, color: 'orange.400' },
-          { label: 'Medium', value: 56, total: 120, color: 'yellow.400' },
-          { label: 'Low', value: 34, total: 120, color: 'green.400' },
-        ].map((bucket) => (
+        {SAMPLE_SEVERITY_BUCKETS.map((bucket) => (
           <Box key={bucket.label}>
             <Flex justify="space-between" fontSize="sm" color={colors.textSecondary}>
               <Text fontWeight="600" color={colors.textPrimary}>
@@ -427,9 +458,12 @@ export default function NetworkAdminDashboard() {
           <Text color={textColor} fontSize="22px" fontWeight="700" lineHeight="100%" mb="6px">
             Network Administrator Dashboard
           </Text>
-          <Text color={textSecondary} fontSize="sm">
-            Reorder the modules below to craft a workspace that matches your workflow.
-          </Text>
+          <Stack spacing={1} color={textSecondary} fontSize="sm">
+            <Text>Reorder the modules below to craft a workspace that matches your workflow.</Text>
+            <Text fontStyle="italic" color={textTertiary}>
+              Sample data is shown while live telemetry integrations are in progress.
+            </Text>
+          </Stack>
         </Box>
         <HStack spacing={3} alignSelf={{ base: 'flex-end', md: 'center' }}>
           <Button variant="ghost" size="sm" onClick={resetLayout} isDisabled={!isEditing}>
@@ -451,61 +485,26 @@ export default function NetworkAdminDashboard() {
       </Flex>
 
       <SimpleGrid columns={{ base: 1, md: 2, xl: 4 }} gap="20px" mb="20px">
-        <Card py="15px" bg={cardBg}>
-          <Box display="flex" alignItems="center">
-            <IconBox w="56px" h="56px" bg={boxBg} icon={<MdBarChart size="28px" color={brandColor} />} />
-            <Box ml="18px">
-              <Text color="secondaryGray.600" fontSize="sm" fontWeight="500" mb="4px">
-                Active Alerts
-              </Text>
-              <Text color={textColor} fontSize="34px" fontWeight="700">
-                24
-              </Text>
+        {SUMMARY_METRICS.map((metric) => (
+          <Card key={metric.label} py="15px" bg={cardBg}>
+            <Box display="flex" alignItems="center">
+              <IconBox
+                w="56px"
+                h="56px"
+                bg={boxBg}
+                icon={<metric.icon size="28px" color={brandColor} />}
+              />
+              <Box ml="18px">
+                <Text color="secondaryGray.600" fontSize="sm" fontWeight="500" mb="4px">
+                  {metric.label}
+                </Text>
+                <Text color={textColor} fontSize="34px" fontWeight="700">
+                  {metric.value}
+                </Text>
+              </Box>
             </Box>
-          </Box>
-        </Card>
-
-        <Card py="15px" bg={cardBg}>
-          <Box display="flex" alignItems="center">
-            <IconBox w="56px" h="56px" bg={boxBg} icon={<MdDashboard size="28px" color={brandColor} />} />
-            <Box ml="18px">
-              <Text color="secondaryGray.600" fontSize="sm" fontWeight="500" mb="4px">
-                Managed IDS Rules
-              </Text>
-              <Text color={textColor} fontSize="34px" fontWeight="700">
-                156
-              </Text>
-            </Box>
-          </Box>
-        </Card>
-
-        <Card py="15px" bg={cardBg}>
-          <Box display="flex" alignItems="center">
-            <IconBox w="56px" h="56px" bg={boxBg} icon={<MdDeviceHub size="28px" color={brandColor} />} />
-            <Box ml="18px">
-              <Text color="secondaryGray.600" fontSize="sm" fontWeight="500" mb="4px">
-                Connected Sensors
-              </Text>
-              <Text color={textColor} fontSize="34px" fontWeight="700">
-                3
-              </Text>
-            </Box>
-          </Box>
-        </Card>
-
-        <Card py="15px" bg={cardBg}>
-          <Box display="flex" alignItems="center">
-            <IconBox w="56px" h="56px" bg={boxBg} icon={<MdTimeline size="28px" color={brandColor} />} />
-            <Box ml="18px">
-              <Text color="secondaryGray.600" fontSize="sm" fontWeight="500" mb="4px">
-                Pending Actions
-              </Text>
-              <Text color={textColor} fontSize="34px" fontWeight="700">
-                8
-              </Text>
-            </Box>
-          </Box>
-        </Card>
+          </Card>
+        ))}
       </SimpleGrid>
 
       <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} gap="20px">
