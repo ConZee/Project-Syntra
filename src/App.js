@@ -6,7 +6,6 @@ import { useState, useEffect } from "react";
 
 import AuthLayout from "./layouts/auth";
 import AdminLayout from "./layouts/admin";
-
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 
@@ -17,16 +16,20 @@ import UserAccounts from "./pages/platformAdmin/UserAccounts";
 import ProfileTypes from "./pages/platformAdmin/ProfileTypes";
 import Alerts from "./pages/platformAdmin/Alerts";
 
+// ⭐ Network Admin layout + routes
+// CHANGE: fix folder name and use relative imports
+import NetworkAdminLayout from "./pages/networkAdmin/NetworkAdminLayout";
+import networkAdminRoutes from "./routes/networkAdminRoutes";
+
 // ---------- Small helper: compute home based on logged-in user ----------
 function DefaultRedirect() {
   const { user, isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/auth/sign-in" replace />;
 
-  // pick a base dashboard by role (extend as you add roles)
   const role = user?.role;
   if (role === "Platform Administrator") return <Navigate to="/platform-admin/dashboard" replace />;
+  if (role === "Network Administrator")  return <Navigate to="/network-admin/dashboard" replace />;
   if (role === "Security Analyst")       return <Navigate to="/platform-admin/alerts" replace />;
-  // fall back to the generic admin area
   return <Navigate to="/admin/default" replace />;
 }
 
@@ -35,11 +38,10 @@ export default function Main() {
 
   // ONE-TIME CLEANUP: Remove old token keys
   useEffect(() => {
-    // Check if old keys exist
-    if (localStorage.getItem('syntra_token') || localStorage.getItem('syntra_user')) {
-      localStorage.removeItem('syntra_token');
-      localStorage.removeItem('syntra_user');
-      console.log('Cleaned up old authentication keys');
+    if (localStorage.getItem("syntra_token") || localStorage.getItem("syntra_user")) {
+      localStorage.removeItem("syntra_token");
+      localStorage.removeItem("syntra_user");
+      console.log("Cleaned up old authentication keys");
     }
   }, []);
 
@@ -60,7 +62,6 @@ export default function Main() {
           </Route>
 
           {/* ---------- Platform Admin area (role-gated) ---------- */}
-          {/* Entire layout requires Platform Administrator */}
           <Route element={<ProtectedRoute roles={["Platform Administrator"]} />}>
             <Route path="platform-admin" element={<PlatformAdminLayout />}>
               <Route index element={<DashboardHome />} />
@@ -71,8 +72,22 @@ export default function Main() {
           </Route>
 
           {/* Alerts shared by Platform Admin + Security Analyst */}
-          <Route element={<ProtectedRoute roles={["Platform Administrator","Security Analyst"]} />}>
+          <Route element={<ProtectedRoute roles={["Platform Administrator", "Security Analyst"]} />}>
             <Route path="platform-admin/alerts" element={<Alerts />} />
+          </Route>
+
+          {/* ---------- ⭐ Network Admin area (role-gated) ---------- */}
+          <Route element={<ProtectedRoute roles={["Network Administrator"]} />}>
+            <Route path="network-admin" element={<NetworkAdminLayout />}>
+              {/* Map all Network Admin routes */}
+              {networkAdminRoutes.map((route, key) => {
+                // FIX: nested route paths must be relative (no leading slash)
+                const childPath = route.path.replace(/^\//, "");
+                return <Route key={key} path={childPath} element={route.component} />;
+              })}
+              {/* Default redirect to dashboard */}
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
           </Route>
 
           {/* ---------- Redirect helpers ---------- */}

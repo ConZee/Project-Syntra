@@ -19,7 +19,6 @@ const SALT_ROUNDS = 10;
 // Allow overrides via environment variables
 const PORT = Number(process.env.PORT || 3001);
 const JWT_SECRET = process.env.JWT_SECRET || 'syntra-secret-key'; // change in prod!
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'syntra-refresh-secret-key'; // change in prod!
 const ELASTIC_URL = process.env.ELASTIC_URL || 'http://192.168.56.128:9200';
 
 // Create Elasticsearch client (used by /api/suricata/alerts and /api/zeek/logs)
@@ -39,7 +38,7 @@ const normalizeRole = (r = '') => {
 const app = express();
 app.use(bodyParser.json());
 
-// CORS (Include Authorization for JWT)
+// CORS (unchanged but expanded headers include Authorization for JWT)
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header(
@@ -92,110 +91,113 @@ db.serialize(() => {
   db.run(`UPDATE users SET role = 'Network Administrator'  WHERE role IN ('Network Admin','network admin')`);
 });
 
-// JWT verification middleware with better error handling
-function verifyToken(req, res, next) {
-  const header = req.headers.authorization;
+// Profile types table
+db.run(`
+  CREATE TABLE IF NOT EXISTS profile_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_at TEXT NOT NULL
+  )
+`);
 
-  if (!header) {
-    return res.status(401).json({ error: 'No authorization header provided' });
-  }
+// IDS Rules table
+db.run(`
+  CREATE TABLE IF NOT EXISTS ids_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_name TEXT NOT NULL,
+    rule_sid TEXT UNIQUE,
+    category TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    rule_content TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'Active',
+    created_by INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  )
+`, (err) => {
+  if (err) console.error('Error creating ids_rules table:', err);
+  else console.log('✅ IDS Rules table ready');
+});
 
-  try {
-    const token = header.split(' ')[1];
+// IDS Sources table
+db.run(`
+  CREATE TABLE IF NOT EXISTS ids_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_name TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Active',
+    last_connection TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+  )
+`, (err) => {
+  if (err) console.error('Error creating ids_sources table:', err);
+  else console.log('✅ IDS Sources table ready');
+});
 
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
+// Notifications table
+db.run(`
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    notification_name TEXT NOT NULL,
+    trigger_condition TEXT NOT NULL,
+    severity_filter TEXT,
+    delivery_method TEXT NOT NULL,
+    recipients TEXT NOT NULL,
+    message_template TEXT,
+    status TEXT NOT NULL DEFAULT 'Enabled',
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+  )
+`, (err) => {
+  if (err) console.error('Error creating notifications table:', err);
+  else console.log('✅ Notifications table ready');
+});
 
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // { id, role, name, email, iat, exp }
-    next();
-  } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
-    }
-    if (err.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token', code: 'INVALID_TOKEN' });
-    }
-    console.error('[verifyToken] Error:', err);
-    return res.status(401).json({ error: 'Authentication failed' });
-  }
-}
+// Dashboard Layouts table
+db.run(`
+  CREATE TABLE IF NOT EXISTS dashboard_layouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    layout_config TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(user_id)
+  )
+`, (err) => {
+  if (err) console.error('Error creating dashboard_layouts table:', err);
+  else console.log('✅ Dashboard Layouts table ready');
+});
 
 // JWT-based RBAC middleware
 function authorize(roles = []) {
   return (req, res, next) => {
     const header = req.headers.authorization;
     if (!header) return res.status(401).json({ error: 'Missing Authorization header' });
-
     try {
       const token = header.split(' ')[1];
       const decoded = jwt.verify(token, JWT_SECRET);
-
       if (roles.length && !roles.includes(decoded.role)) {
         return res.status(403).json({ error: 'Forbidden: insufficient role' });
       }
-
       req.user = decoded; // { id, role, name, email, iat, exp }
       next();
     } catch (err) {
-      if (err.name === 'TokenExpiredError') {
-        return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
-      }
       console.error('[authorize] Invalid token:', err);
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
   };
 }
 
-// Token refresh endpoint
-app.post('/api/auth/refresh', (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (!refreshToken) {
-    return res.status(401).json({ error: 'Refresh token required' });
-  }
-
-  try {
-    // Verify the refresh token
-    const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
-
-    // Generate new access token
-    const newAccessToken = jwt.sign(
-      {
-        id: decoded.id,
-        role: decoded.role,
-        name: decoded.name,
-        email: decoded.email
-      },
-      JWT_SECRET,
-      { expiresIn: '2h' }
-    );
-
-    // Generate new refresh token
-    const newRefreshToken = jwt.sign(
-      {
-        id: decoded.id,
-        role: decoded.role,
-        name: decoded.name,
-        email: decoded.email
-      },
-      JWT_REFRESH_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    return res.json({
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-    });
-  } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Refresh token expired', code: 'REFRESH_TOKEN_EXPIRED' });
-    }
-    console.error('[POST /api/auth/refresh] Error:', err);
-    return res.status(401).json({ error: 'Invalid refresh token' });
-  }
-});
+// =========================================================
+// USER MANAGEMENT ROUTES
+// =========================================================
 
 // POST /api/users - Create user
 app.post('/api/users', async (req, res) => {
@@ -295,23 +297,15 @@ app.post('/api/auth/login', (req, res) => {
         return res.status(403).json({ error: 'Role mismatch for this account.' });
       }
 
-      // Generate access token (2 hours)
-      const accessToken = jwt.sign(
+      // Sign a real JWT with the user's role
+      const token = jwt.sign(
         { id: row.id, role: storedRole, name: row.name, email: row.email },
         JWT_SECRET,
         { expiresIn: '2h' }
       );
 
-      // Generate refresh token (7 days)
-      const refreshToken = jwt.sign(
-        { id: row.id, role: storedRole, name: row.name, email: row.email },
-        JWT_REFRESH_SECRET,
-        { expiresIn: '7d' }
-      );
-
       return res.json({
-        token: accessToken,
-        refreshToken: refreshToken,
+        token,
         user: {
           id: row.id,
           name: row.name,
@@ -427,17 +421,10 @@ app.delete('/api/users/:id', (req, res) => {
   });
 });
 
-// Profile types table
-db.run(`
-  CREATE TABLE IF NOT EXISTS profile_types (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TEXT NOT NULL
-  )
-`);
+// =========================================================
+// PROFILE TYPES ROUTES
+// =========================================================
 
-// Profile Types APIs (unchanged)
 app.get('/api/profile-types', (req, res) => {
   db.all(`SELECT id, name, status, created_at FROM profile_types ORDER BY id DESC`, [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -450,43 +437,32 @@ app.post('/api/profile-types', (req, res) => {
   if (!name || !status) return res.status(400).json({ error: 'name and status are required.' });
   const now = new Date().toISOString();
   const sql = `INSERT INTO profile_types (name, status, created_at) VALUES (?, ?, ?)`;
-
-  db.run(sql, [name, status, now], function (err) {
+  db.run(sql, [String(name).trim(), String(status).trim(), now], function (err) {
     if (err) {
-      if (String(err.message).includes('UNIQUE constraint failed')) {
+      if (String(err.message).includes('UNIQUE')) {
         return res.status(409).json({ error: 'Profile type already exists.' });
       }
       return res.status(500).json({ error: err.message });
     }
-    return res.status(201).json({ id: this.lastID, name, status, created_at: now });
-  });
-});
-
-app.get('/api/profile-types/:id', (req, res) => {
-  const id = Number(req.params.id);
-  db.get(`SELECT * FROM profile_types WHERE id = ?`, [id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: 'Profile type not found.' });
-    return res.json(row);
+    return res.status(201).json({ id: this.lastID, name: String(name).trim(), status, created_at: now });
   });
 });
 
 app.put('/api/profile-types/:id', (req, res) => {
   const id = Number(req.params.id);
   const { name, status } = req.body || {};
-  if (!name || !status) return res.status(400).json({ error: 'name and status are required.' });
+  if (!id || !name || !status) return res.status(400).json({ error: 'id, name and status are required.' });
 
   const sql = `UPDATE profile_types SET name = ?, status = ? WHERE id = ?`;
-  db.run(sql, [name, status, id], function (err) {
+  db.run(sql, [String(name).trim(), String(status).trim(), id], function (err) {
     if (err) {
-      if (String(err.message).includes('UNIQUE constraint failed')) {
-        return res.status(409).json({ error: 'Profile type name already exists.' });
+      if (String(err.message).includes('UNIQUE')) {
+        return res.status(409).json({ error: 'Profile type already exists.' });
       }
       return res.status(500).json({ error: err.message });
     }
     if (this.changes === 0) return res.status(404).json({ error: 'Profile type not found.' });
-
-    db.get(`SELECT * FROM profile_types WHERE id = ?`, [id], (err2, row) => {
+    db.get(`SELECT id, name, status, created_at FROM profile_types WHERE id = ?`, [id], (err2, row) => {
       if (err2) return res.status(500).json({ error: err2.message });
       return res.json(row);
     });
@@ -505,15 +481,13 @@ app.delete('/api/profile-types/:id', (req, res) => {
 });
 
 // =========================================================
-// IDS INTEGRATION ROUTES — Suricata & Zeek
-// (Place this block ABOVE app.listen(...))
+// IDS INTEGRATION ROUTES - Suricata & Zeek
 // =========================================================
 
 // GET /api/suricata/alerts?limit=20
-// Returns recent Suricata alerts from Elasticsearch
 app.get(
   "/api/suricata/alerts",
-  authorize(["Platform Administrator", "Security Analyst"]),
+  authorize(["Platform Administrator", "Security Analyst", "Network Administrator"]),
   async (req, res) => {
     try {
       const limit = Math.max(1, Math.min(200, Number(req.query.limit || 20)));
@@ -542,29 +516,28 @@ app.get(
 
       const alerts = result.hits.hits.map((h) => ({
         id: h._id,
-        timestamp: h._source?.["@timestamp"] || "",
-        signature: h._source?.suricata?.eve?.alert?.signature || "Unknown",
-        severity: h._source?.suricata?.eve?.alert?.severity || 3,
-        src_ip: h._source?.source?.ip || "",
-        src_port: h._source?.source?.port || 0,
-        dest_ip: h._source?.destination?.ip || "",
-        dest_port: h._source?.destination?.port || 0,
-        protocol: h._source?.network?.protocol || "",
+        timestamp: h._source?.["@timestamp"],
+        signature: h._source?.suricata?.eve?.alert?.signature,
+        severity: h._source?.suricata?.eve?.alert?.severity,
+        src_ip: h._source?.source?.ip,
+        src_port: h._source?.source?.port,
+        dest_ip: h._source?.destination?.ip,
+        dest_port: h._source?.destination?.port,
+        protocol: h._source?.network?.protocol,
       }));
 
       res.json(alerts);
     } catch (err) {
-      console.error("[GET /api/suricata/alerts] ES error:", err);
-      res.status(500).json({ error: "Failed to fetch Suricata alerts" });
+      console.error("[/api/suricata/alerts] ES error:", err?.meta?.body || err);
+      res.status(500).json({ error: "ES query failed" });
     }
   }
 );
 
 // GET /api/zeek/logs?limit=20
-// Returns recent Zeek logs from Elasticsearch
 app.get(
   "/api/zeek/logs",
-  authorize(["Platform Administrator", "Security Analyst"]),
+  authorize(["Platform Administrator", "Security Analyst", "Network Administrator"]),
   async (req, res) => {
     try {
       const limit = Math.max(1, Math.min(200, Number(req.query.limit || 20)));
@@ -573,47 +546,205 @@ app.get(
         size: limit,
         sort: [{ "@timestamp": { order: "desc" } }],
         track_total_hits: false,
-        query: {
-          bool: {
-            must: [{ match: { "event.module": "zeek" } }],
-          },
-        },
+        query: { match: { "event.module": "zeek" } },
         _source: [
           "@timestamp",
-          "zeek.connection.id_orig_h",
-          "zeek.connection.id_orig_p",
-          "zeek.connection.id_resp_h",
-          "zeek.connection.id_resp_p",
-          "zeek.connection.proto",
-          "zeek.connection.service",
-          "zeek.connection.conn_state",
+          "zeek.event",
+          "zeek.service",
+          "source.ip", "source.port",
+          "destination.ip", "destination.port",
+          "network.transport"
         ],
       });
 
       const logs = result.hits.hits.map((h) => ({
         id: h._id,
-        timestamp: h._source?.["@timestamp"] || "",
-        src_ip: h._source?.zeek?.connection?.id_orig_h || "",
-        src_port: h._source?.zeek?.connection?.id_orig_p || 0,
-        dest_ip: h._source?.zeek?.connection?.id_resp_h || "",
-        dest_port: h._source?.zeek?.connection?.id_resp_p || 0,
-        protocol: h._source?.zeek?.connection?.proto || "",
-        service: h._source?.zeek?.connection?.service || "",
-        conn_state: h._source?.zeek?.connection?.conn_state || "",
+        timestamp: h._source?.["@timestamp"],
+        event_type: h._source?.zeek?.event,
+        service: h._source?.zeek?.service,
+        src_ip: h._source?.source?.ip,
+        src_port: h._source?.source?.port,
+        dest_ip: h._source?.destination?.ip,
+        dest_port: h._source?.destination?.port,
+        proto: h._source?.network?.transport,
       }));
 
       res.json(logs);
     } catch (err) {
-      console.error("[GET /api/zeek/logs] ES error:", err);
-      res.status(500).json({ error: "Failed to fetch Zeek logs" });
+      console.error("[/api/zeek/logs] ES error:", err?.meta?.body || err);
+      res.status(500).json({ error: "ES query failed" });
     }
   }
 );
 
 // =========================================================
+// IDS RULES MANAGEMENT APIs
+// =========================================================
+
+// GET all IDS rules
+app.get('/api/ids-rules', authorize(['Network Administrator', 'Security Analyst']), (req, res) => {
+  const sql = `SELECT * FROM ids_rules ORDER BY created_at DESC`;
+
+  db.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error('[GET /api/ids-rules] Error:', err);
+      return res.status(500).json({ error: 'Failed to fetch rules' });
+    }
+    res.json(rows);
+  });
+});
+
+// NEW: SEARCH ROUTE MOVED HERE (BEFORE :id)
+// GET search IDS rules
+app.get('/api/ids-rules/search', authorize(['Network Administrator', 'Security Analyst']), (req, res) => {
+  const { q } = req.query;
+
+  if (!q) {
+    return res.status(400).json({ error: 'Search query required' });
+  }
+
+  const searchTerm = `%${q}%`;
+  const sql = `
+    SELECT * FROM ids_rules
+    WHERE rule_name LIKE ? OR rule_sid LIKE ? OR category LIKE ? OR description LIKE ?
+    ORDER BY created_at DESC
+  `;
+
+  db.all(sql, [searchTerm, searchTerm, searchTerm, searchTerm], (err, rows) => {
+    if (err) {
+      console.error('[GET /api/ids-rules/search] Error:', err);
+      return res.status(500).json({ error: 'Search failed' });
+    }
+    res.json(rows);
+  });
+});
+
+// GET single IDS rule by ID (NOW AFTER SEARCH)
+app.get('/api/ids-rules/:id', authorize(['Network Administrator', 'Security Analyst']), (req, res) => {
+  const { id } = req.params;
+  const sql = `SELECT * FROM ids_rules WHERE id = ?`;
+
+  db.get(sql, [id], (err, row) => {
+    if (err) {
+      console.error('[GET /api/ids-rules/:id] Error:', err);
+      return res.status(500).json({ error: 'Failed to fetch rule' });
+    }
+    if (!row) return res.status(404).json({ error: 'Rule not found' });
+    res.json(row);
+  });
+});
+
+// POST create new IDS rule
+app.post('/api/ids-rules', authorize(['Network Administrator']), (req, res) => {
+  const { rule_name, rule_sid, category, severity, rule_content, description, status } = req.body;
+
+  if (!rule_name || !category || !severity || !rule_content) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const now = new Date().toISOString();
+  const sql = `
+    INSERT INTO ids_rules
+    (rule_name, rule_sid, category, severity, rule_content, description, status, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  const created_by = req.user.id; // from JWT token
+  const finalStatus = status || 'Active';
+
+  db.run(sql, [
+    rule_name, rule_sid, category, severity, rule_content,
+    description, finalStatus, created_by, now, now
+  ], function(err) {
+    if (err) {
+      console.error('[POST /api/ids-rules] Error:', err);
+      if (err.message.includes('UNIQUE constraint')) {
+        return res.status(409).json({ error: 'Rule SID already exists' });
+      }
+      return res.status(500).json({ error: 'Failed to create rule' });
+    }
+
+    res.status(201).json({
+      id: this.lastID,
+      rule_name,
+      rule_sid,
+      category,
+      severity,
+      rule_content,
+      description,
+      status: finalStatus,
+      created_by,
+      created_at: now,
+      updated_at: now
+    });
+  });
+});
+
+// PUT update IDS rule
+app.put('/api/ids-rules/:id', authorize(['Network Administrator']), (req, res) => {
+  const { id } = req.params;
+  const { rule_name, rule_sid, category, severity, rule_content, description, status } = req.body;
+
+  if (!rule_name || !category || !severity || !rule_content) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const now = new Date().toISOString();
+  const sql = `
+    UPDATE ids_rules
+    SET rule_name = ?, rule_sid = ?, category = ?, severity = ?,
+        rule_content = ?, description = ?, status = ?, updated_at = ?
+    WHERE id = ?
+  `;
+
+  db.run(sql, [
+    rule_name, rule_sid, category, severity, rule_content,
+    description, status, now, id
+  ], function(err) {
+    if (err) {
+      console.error('[PUT /api/ids-rules/:id] Error:', err);
+      if (err.message.includes('UNIQUE constraint')) {
+        return res.status(409).json({ error: 'Rule SID already exists' });
+      }
+      return res.status(500).json({ error: 'Failed to update rule' });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+
+    // Fetch and return updated rule
+    db.get(`SELECT * FROM ids_rules WHERE id = ?`, [id], (err, row) => {
+      if (err || !row) return res.status(500).json({ error: 'Failed to fetch updated rule' });
+      res.json(row);
+    });
+  });
+});
+
+// DELETE IDS rule
+app.delete('/api/ids-rules/:id', authorize(['Network Administrator']), (req, res) => {
+  const { id } = req.params;
+  const sql = `DELETE FROM ids_rules WHERE id = ?`;
+
+  db.run(sql, [id], function(err) {
+    if (err) {
+      console.error('[DELETE /api/ids-rules/:id] Error:', err);
+      return res.status(500).json({ error: 'Failed to delete rule' });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Rule not found' });
+    }
+
+    res.json({ success: true, message: 'Rule deleted successfully' });
+  });
+});
+
+// =========================================================
 // START SERVER
 // =========================================================
+
 app.listen(PORT, () => {
-  console.log(`✅ User API listening on http://localhost:${PORT}`);
-  console.log(`✅ Elasticsearch node: ${ELASTIC_URL}`);
+  console.log(`✅ Server is running on http://0.0.0.0:${PORT}`);
+  console.log(`🔐 JWT roles enforced. ES at ${ELASTIC_URL}`);
 });
