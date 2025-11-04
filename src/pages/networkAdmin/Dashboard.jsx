@@ -28,7 +28,6 @@ import {
   MdOutlineDragIndicator,
   MdOutlineEdit,
   MdSecurity,
-  MdTrendingUp,
   MdTimeline,
 } from 'react-icons/md';
 import { getSuricataAlerts, getIDSRules } from '../../backend_api';

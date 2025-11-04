@@ -17,6 +17,7 @@ export default function GeoMap({ alerts = [] }) {
   const textPrimary = useColorModeValue('secondaryGray.900', 'white');
   const textSecondary = useColorModeValue('secondaryGray.700', 'whiteAlpha.700');
   const subtleBg = useColorModeValue('secondaryGray.100', 'whiteAlpha.100');
+  const hoverBg = useColorModeValue('secondaryGray.200', 'whiteAlpha.200');
   const heatColor = useColorModeValue('red.500', 'red.400');
 
   // Analyze threat sources
@@ -168,7 +169,7 @@ export default function GeoMap({ alerts = [] }) {
                 bg={subtleBg}
                 cursor="pointer"
                 transition="all 0.2s"
-                _hover={{ transform: 'translateX(4px)', bg: useColorModeValue('secondaryGray.200', 'whiteAlpha.200') }}
+                _hover={{ transform: 'translateX(4px)', bg: hoverBg }}
               >
                 <Flex align="center" gap={2} flex="1">
                   <Text fontSize="xs" fontWeight="700" color={textSecondary} minW="20px">
