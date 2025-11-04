@@ -506,6 +506,9 @@ app.get(
           "@timestamp",
           "suricata.eve.alert.signature",
           "suricata.eve.alert.severity",
+          "event.severity",
+          "log.level",
+          "suricata.eve.severity",
           "source.ip",
           "source.port",
           "destination.ip",
@@ -514,17 +517,37 @@ app.get(
         ],
       });
 
-      const alerts = result.hits.hits.map((h) => ({
-        id: h._id,
-        timestamp: h._source?.["@timestamp"],
-        signature: h._source?.suricata?.eve?.alert?.signature,
-        severity: h._source?.suricata?.eve?.alert?.severity,
-        src_ip: h._source?.source?.ip,
-        src_port: h._source?.source?.port,
-        dest_ip: h._source?.destination?.ip,
-        dest_port: h._source?.destination?.port,
-        protocol: h._source?.network?.protocol,
-      }));
+      const alerts = result.hits.hits.map((h) => {
+        // Try multiple possible locations for severity field
+        // Common locations in Elasticsearch/Filebeat/Suricata logs:
+        // 1. suricata.eve.alert.severity (most common)
+        // 2. event.severity (ECS standard)
+        // 3. suricata.eve.severity (alternative)
+        // 4. log.level (fallback)
+        let severity = h._source?.suricata?.eve?.alert?.severity ||
+                       h._source?.event?.severity ||
+                       h._source?.suricata?.eve?.severity ||
+                       h._source?.log?.level;
+
+        // If severity is still undefined, check if we can derive it from signature
+        // Many Suricata rules don't have severity set, so we'll default to 2 (Medium)
+        if (!severity) {
+          severity = 2;
+          console.log("[Suricata] No severity found for alert:", h._id, "signature:", h._source?.suricata?.eve?.alert?.signature);
+        }
+
+        return {
+          id: h._id,
+          timestamp: h._source?.["@timestamp"],
+          signature: h._source?.suricata?.eve?.alert?.signature,
+          severity: severity,
+          src_ip: h._source?.source?.ip,
+          src_port: h._source?.source?.port,
+          dest_ip: h._source?.destination?.ip,
+          dest_port: h._source?.destination?.port,
+          protocol: h._source?.network?.protocol,
+        };
+      });
 
       res.json(alerts);
     } catch (err) {
