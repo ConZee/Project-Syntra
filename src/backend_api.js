@@ -36,6 +36,14 @@ export async function getZeekLogs(limit = 20) {
   return res.json();
 }
 
+export async function getZeekConnections(limit = 50, from = 0) {
+  const res = await fetch(`${API}/api/zeek/connections?limit=${limit}&from=${from}`, {
+    headers: { ...getAuthHeader() }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function getIDSRules() {
   const res = await fetch(`${API}/api/ids-rules`, {
     headers: { ...getAuthHeader() }

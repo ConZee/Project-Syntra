@@ -30,9 +30,12 @@ import {
   MdSecurity,
   MdTimeline,
 } from 'react-icons/md';
-import { getSuricataAlerts, getIDSRules } from '../../backend_api';
+import { getSuricataAlerts, getZeekLogs, getIDSRules } from '../../backend_api';
 import { useAuth } from '../../auth/AuthContext';
-import GeoMap from 'components/charts/GeoMap';
+import ThreatHeatMap from 'components/charts/ThreatHeatMap';
+import AlertTrendChart from 'components/charts/AlertTrendChart';
+import AttackBarChart from 'components/charts/AttackBarChart';
+import SeverityPieChart from 'components/charts/SeverityPieChart';
 
 const STORAGE_KEY = 'networkAdmin-dashboard-layout';
 const DATA_TRANSFER_TYPE = 'networkAdmin/module-id';
@@ -127,7 +130,7 @@ const MODULE_LIBRARY = {
     icon: MdDeviceHub,
     render: (colors, data = {}) => {
       const alerts = data.alerts || [];
-      return <GeoMap alerts={alerts} />;
+      return <ThreatHeatMap alerts={alerts} />;
     },
   },
   threats: {
@@ -357,6 +360,42 @@ const MODULE_LIBRARY = {
       );
     },
   },
+  trend: {
+    id: 'trend',
+    title: 'Suricata Trends (24h)',
+    icon: MdTimeline,
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+      return <AlertTrendChart alerts={alerts} title="Suricata Alert Activity" />;
+    },
+  },
+  zeekTrend: {
+    id: 'zeekTrend',
+    title: 'Zeek Activity (24h)',
+    icon: MdTimeline,
+    render: (colors, data = {}) => {
+      const zeekLogs = data.zeekLogs || [];
+      return <AlertTrendChart alerts={zeekLogs} title="Zeek Network Activity" />;
+    },
+  },
+  topAttacks: {
+    id: 'topAttacks',
+    title: 'Top Attack Signatures',
+    icon: MdBarChart,
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+      return <AttackBarChart alerts={alerts} title="Top Attack Signatures" maxBars={5} />;
+    },
+  },
+  severityPie: {
+    id: 'severityPie',
+    title: 'Severity Distribution',
+    icon: MdDashboard,
+    render: (colors, data = {}) => {
+      const alerts = data.alerts || [];
+      return <SeverityPieChart alerts={alerts} title="Alert Severity Breakdown" />;
+    },
+  },
 };
 
 const DEFAULT_ORDER = Object.keys(MODULE_LIBRARY);
@@ -377,6 +416,7 @@ export default function NetworkAdminDashboard() {
 
   // Real-time data state
   const [alerts, setAlerts] = useState([]);
+  const [zeekLogs, setZeekLogs] = useState([]);
   const [ruleCount, setRuleCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -397,12 +437,14 @@ export default function NetworkAdminDashboard() {
 
     try {
       setLoading(true);
-      const [alertsData, rulesData] = await Promise.all([
+      const [alertsData, zeekData, rulesData] = await Promise.all([
         getSuricataAlerts(100),
+        getZeekLogs(100),
         getIDSRules(),
       ]);
 
       setAlerts(alertsData || []);
+      setZeekLogs(zeekData || []);
       setRuleCount(rulesData?.length || 0);
     } catch (err) {
       console.error('Dashboard data fetch error:', err);
@@ -422,10 +464,10 @@ export default function NetworkAdminDashboard() {
     }
   }, [isAuthenticated, toast]);
 
-  // Poll for updates every 5 seconds
+  // Poll for updates every 30 seconds
   useEffect(() => {
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 5000);
+    const interval = setInterval(fetchDashboardData, 30000);
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
 
@@ -467,10 +509,11 @@ export default function NetworkAdminDashboard() {
   const moduleData = useMemo(
     () => ({
       alerts,
+      zeekLogs,
       ruleCount,
       loading,
     }),
-    [alerts, ruleCount, loading],
+    [alerts, zeekLogs, ruleCount, loading],
   );
 
   const [moduleOrder, setModuleOrder] = useState(() => {
@@ -613,7 +656,7 @@ export default function NetworkAdminDashboard() {
           <Stack spacing={1} color={textSecondary} fontSize="sm">
             <Text>Reorder the modules below to craft a workspace that matches your workflow.</Text>
             <Text fontStyle="italic" color={textTertiary}>
-              Real-time data updates every 5 seconds {loading && '(Loading...)'}
+              Real-time data updates every 30 seconds {loading && '(Loading...)'}
             </Text>
           </Stack>
         </Box>

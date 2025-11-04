@@ -600,6 +600,81 @@ app.get(
   }
 );
 
+// GET /api/zeek/connections - Detailed Zeek connection logs with pagination
+app.get(
+  "/api/zeek/connections",
+  authorize(["Platform Administrator", "Security Analyst", "Network Administrator"]),
+  async (req, res) => {
+    console.log('[Zeek Connections] Fetching from Elasticsearch...');
+
+    try {
+      const limit = Math.max(1, Math.min(200, Number(req.query.limit || 50)));
+      const from = Math.max(0, Number(req.query.from || 0));
+
+      const result = await es.search({
+        index: ["filebeat-*", ".ds-filebeat-*"],
+        size: limit,
+        from: from,
+        sort: [{ "@timestamp": { order: "desc" } }],
+        track_total_hits: true,
+        query: {
+          bool: {
+            must: [
+              { match: { "event.dataset": "zeek.connection" } }
+            ],
+            filter: [
+              { exists: { field: "source.ip" } }
+            ]
+          }
+        },
+        _source: [
+          "@timestamp",
+          "source.ip",
+          "source.port",
+          "destination.ip",
+          "destination.port",
+          "network.transport",
+          "network.bytes",
+          "network.packets",
+          "zeek.connection.duration",
+          "zeek.connection.state",
+          "zeek.connection.community_id"
+        ],
+      });
+
+      const connections = result.hits.hits.map((h) => ({
+        id: h._id,
+        timestamp: h._source?.["@timestamp"],
+        source_ip: h._source?.source?.ip || "Unknown",
+        source_port: h._source?.source?.port || 0,
+        destination_ip: h._source?.destination?.ip || "Unknown",
+        destination_port: h._source?.destination?.port || 0,
+        protocol: h._source?.network?.transport || "Unknown",
+        bytes: h._source?.network?.bytes || 0,
+        packets: h._source?.network?.packets || 0,
+        duration: h._source?.zeek?.connection?.duration || 0,
+        connection_state: h._source?.zeek?.connection?.state || "Unknown",
+        community_id: h._source?.zeek?.connection?.community_id || ""
+      }));
+
+      const total = typeof result.hits.total === 'object'
+        ? result.hits.total.value
+        : result.hits.total;
+
+      console.log(`[Zeek Connections] Found ${connections.length} of ${total} records`);
+
+      res.json({
+        total: total,
+        connections: connections
+      });
+
+    } catch (err) {
+      console.error("[/api/zeek/connections] ES error:", err?.meta?.body || err);
+      res.status(500).json({ error: "Failed to fetch Zeek connections" });
+    }
+  }
+);
+
 // =========================================================
 // IDS RULES MANAGEMENT APIs
 // =========================================================
