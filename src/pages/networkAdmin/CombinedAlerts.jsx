@@ -32,6 +32,7 @@ import {
 import { MdRefresh, MdSecurity, MdWarning, MdNetworkCheck } from 'react-icons/md';
 import Card from 'components/card/Card';
 import { getSuricataAlerts, getZeekLogs } from 'backend_api';
+import { formatIP, getIPVersion, getIPVersionColorScheme } from '../../utils/ipFormatter';
 
 export default function CombinedAlerts() {
   const [suricataAlerts, setSuricataAlerts] = useState([]);
@@ -274,10 +275,28 @@ export default function CombinedAlerts() {
                             </Badge>
                           </Td>
                           <Td borderColor={borderColor} fontSize="sm" fontWeight="600">
-                            {alert.src_ip || '—'}
+                            <Flex align="center" gap={2}>
+                              <Text noOfLines={1} title={alert.src_ip}>
+                                {formatIP(alert.src_ip)}
+                              </Text>
+                              {alert.src_ip && alert.src_ip.length > 20 && (
+                                <Badge colorScheme={getIPVersionColorScheme(getIPVersion(alert.src_ip))} fontSize="0.65rem">
+                                  {getIPVersion(alert.src_ip)}
+                                </Badge>
+                              )}
+                            </Flex>
                           </Td>
                           <Td borderColor={borderColor} fontSize="sm" fontWeight="600">
-                            {alert.dest_ip || '—'}
+                            <Flex align="center" gap={2}>
+                              <Text noOfLines={1} title={alert.dest_ip}>
+                                {formatIP(alert.dest_ip)}
+                              </Text>
+                              {alert.dest_ip && alert.dest_ip.length > 20 && (
+                                <Badge colorScheme={getIPVersionColorScheme(getIPVersion(alert.dest_ip))} fontSize="0.65rem">
+                                  {getIPVersion(alert.dest_ip)}
+                                </Badge>
+                              )}
+                            </Flex>
                           </Td>
                           <Td borderColor={borderColor} fontSize="sm">
                             {alert.dest_port || '—'}
@@ -332,10 +351,28 @@ export default function CombinedAlerts() {
                             <Badge colorScheme="purple">{log.service || '—'}</Badge>
                           </Td>
                           <Td borderColor={borderColor} fontSize="sm" fontWeight="600">
-                            {log.src_ip || '—'}
+                            <Flex align="center" gap={2}>
+                              <Text noOfLines={1} title={log.src_ip}>
+                                {formatIP(log.src_ip)}
+                              </Text>
+                              {log.src_ip && log.src_ip.length > 20 && (
+                                <Badge colorScheme={getIPVersionColorScheme(getIPVersion(log.src_ip))} fontSize="0.65rem">
+                                  {getIPVersion(log.src_ip)}
+                                </Badge>
+                              )}
+                            </Flex>
                           </Td>
                           <Td borderColor={borderColor} fontSize="sm" fontWeight="600">
-                            {log.dest_ip || '—'}
+                            <Flex align="center" gap={2}>
+                              <Text noOfLines={1} title={log.dest_ip}>
+                                {formatIP(log.dest_ip)}
+                              </Text>
+                              {log.dest_ip && log.dest_ip.length > 20 && (
+                                <Badge colorScheme={getIPVersionColorScheme(getIPVersion(log.dest_ip))} fontSize="0.65rem">
+                                  {getIPVersion(log.dest_ip)}
+                                </Badge>
+                              )}
+                            </Flex>
                           </Td>
                           <Td borderColor={borderColor} fontSize="sm">
                             {log.dest_port || '—'}

@@ -36,6 +36,7 @@ import ThreatHeatMap from 'components/charts/ThreatHeatMap';
 import AlertTrendChart from 'components/charts/AlertTrendChart';
 import AttackBarChart from 'components/charts/AttackBarChart';
 import SeverityPieChart from 'components/charts/SeverityPieChart';
+import { formatIP, getIPVersion, getIPVersionColorScheme } from '../../utils/ipFormatter';
 
 const STORAGE_KEY = 'networkAdmin-dashboard-layout';
 const DATA_TRANSFER_TYPE = 'networkAdmin/module-id';
@@ -103,10 +104,20 @@ const MODULE_LIBRARY = {
                 <Text fontWeight="600" color={colors.textPrimary} noOfLines={1}>
                   {alert.signature || 'Unknown Alert'}
                 </Text>
-                <Text fontSize="sm" color={colors.textSecondary}>
-                  {alert.src_ip || '—'} → {alert.dest_ip || '—'}
-                  {alert.dest_port ? `:${alert.dest_port}` : ''}
-                </Text>
+                <Flex align="center" gap={2} fontSize="sm" color={colors.textSecondary}>
+                  <Text noOfLines={1} title={alert.src_ip}>
+                    {formatIP(alert.src_ip, 15)}
+                  </Text>
+                  <Text>→</Text>
+                  <Text noOfLines={1} title={alert.dest_ip}>
+                    {formatIP(alert.dest_ip, 15)}{alert.dest_port ? `:${alert.dest_port}` : ''}
+                  </Text>
+                  {(alert.src_ip?.length > 20 || alert.dest_ip?.length > 20) && (
+                    <Badge colorScheme={getIPVersionColorScheme(getIPVersion(alert.src_ip || alert.dest_ip))} fontSize="0.6rem">
+                      {getIPVersion(alert.src_ip || alert.dest_ip)}
+                    </Badge>
+                  )}
+                </Flex>
                 <Text fontSize="xs" mt={1} color={colors.textTertiary}>
                   {formatTime(alert.timestamp)} | {alert.protocol || 'N/A'}
                 </Text>

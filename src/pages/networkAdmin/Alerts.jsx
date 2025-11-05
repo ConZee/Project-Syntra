@@ -54,6 +54,7 @@ import {
 import Card from 'components/card/Card';
 import { getSuricataAlerts, getZeekConnections } from '../../backend_api';
 import { useAuth } from '../../auth/AuthContext';
+import { formatIP, getIPVersion, getIPVersionColorScheme } from '../../utils/ipFormatter';
 
 export default function AlertsPage() {
   const toast = useToast();
@@ -496,13 +497,31 @@ export default function AlertsPage() {
                         {alert.signature}
                       </Td>
                       <Td fontSize="sm" onClick={() => openAlertDetails(alert)}>
-                        {alert.src_ip || '—'}
+                        <Flex align="center" gap={2}>
+                          <Text noOfLines={1} title={alert.src_ip}>
+                            {formatIP(alert.src_ip)}
+                          </Text>
+                          {alert.src_ip && alert.src_ip.length > 20 && (
+                            <Badge colorScheme={getIPVersionColorScheme(getIPVersion(alert.src_ip))} fontSize="0.65rem">
+                              {getIPVersion(alert.src_ip)}
+                            </Badge>
+                          )}
+                        </Flex>
                       </Td>
                       <Td fontSize="sm" onClick={() => openAlertDetails(alert)}>
                         {alert.src_port || '—'}
                       </Td>
                       <Td fontSize="sm" onClick={() => openAlertDetails(alert)}>
-                        {alert.dest_ip || '—'}
+                        <Flex align="center" gap={2}>
+                          <Text noOfLines={1} title={alert.dest_ip}>
+                            {formatIP(alert.dest_ip)}
+                          </Text>
+                          {alert.dest_ip && alert.dest_ip.length > 20 && (
+                            <Badge colorScheme={getIPVersionColorScheme(getIPVersion(alert.dest_ip))} fontSize="0.65rem">
+                              {getIPVersion(alert.dest_ip)}
+                            </Badge>
+                          )}
+                        </Flex>
                       </Td>
                       <Td fontSize="sm" onClick={() => openAlertDetails(alert)}>
                         {alert.dest_port || '—'}
@@ -586,9 +605,31 @@ export default function AlertsPage() {
                 {zeekConnections.slice(0, 100).map((conn) => (
                   <Tr key={conn.id} _hover={{ bg: hoverBg }}>
                     <Td fontSize="sm">{formatTimestamp(conn.timestamp)}</Td>
-                    <Td fontSize="sm" fontWeight="600">{conn.source_ip}</Td>
+                    <Td fontSize="sm" fontWeight="600">
+                      <Flex align="center" gap={2}>
+                        <Text noOfLines={1} title={conn.source_ip}>
+                          {formatIP(conn.source_ip)}
+                        </Text>
+                        {conn.source_ip && conn.source_ip.length > 20 && (
+                          <Badge colorScheme={getIPVersionColorScheme(getIPVersion(conn.source_ip))} fontSize="0.65rem">
+                            {getIPVersion(conn.source_ip)}
+                          </Badge>
+                        )}
+                      </Flex>
+                    </Td>
                     <Td fontSize="sm">{conn.source_port}</Td>
-                    <Td fontSize="sm" fontWeight="600">{conn.destination_ip}</Td>
+                    <Td fontSize="sm" fontWeight="600">
+                      <Flex align="center" gap={2}>
+                        <Text noOfLines={1} title={conn.destination_ip}>
+                          {formatIP(conn.destination_ip)}
+                        </Text>
+                        {conn.destination_ip && conn.destination_ip.length > 20 && (
+                          <Badge colorScheme={getIPVersionColorScheme(getIPVersion(conn.destination_ip))} fontSize="0.65rem">
+                            {getIPVersion(conn.destination_ip)}
+                          </Badge>
+                        )}
+                      </Flex>
+                    </Td>
                     <Td fontSize="sm">{conn.destination_port}</Td>
                     <Td>
                       <Badge colorScheme="blue" fontSize="0.75rem">
@@ -651,9 +692,31 @@ export default function AlertsPage() {
                       </Badge>
                       {alert.signature}
                     </Td>
-                    <Td fontSize="sm" fontWeight="600">{alert.src_ip || '—'}</Td>
+                    <Td fontSize="sm" fontWeight="600">
+                      <Flex align="center" gap={2}>
+                        <Text noOfLines={1} title={alert.src_ip}>
+                          {formatIP(alert.src_ip)}
+                        </Text>
+                        {alert.src_ip && alert.src_ip.length > 20 && (
+                          <Badge colorScheme={getIPVersionColorScheme(getIPVersion(alert.src_ip))} fontSize="0.6rem">
+                            {getIPVersion(alert.src_ip)}
+                          </Badge>
+                        )}
+                      </Flex>
+                    </Td>
                     <Td fontSize="sm">{alert.src_port || '—'}</Td>
-                    <Td fontSize="sm" fontWeight="600">{alert.dest_ip || '—'}</Td>
+                    <Td fontSize="sm" fontWeight="600">
+                      <Flex align="center" gap={2}>
+                        <Text noOfLines={1} title={alert.dest_ip}>
+                          {formatIP(alert.dest_ip)}
+                        </Text>
+                        {alert.dest_ip && alert.dest_ip.length > 20 && (
+                          <Badge colorScheme={getIPVersionColorScheme(getIPVersion(alert.dest_ip))} fontSize="0.6rem">
+                            {getIPVersion(alert.dest_ip)}
+                          </Badge>
+                        )}
+                      </Flex>
+                    </Td>
                     <Td fontSize="sm">{alert.dest_port || '—'}</Td>
                     <Td>
                       <Badge colorScheme="blue" fontSize="0.75rem">
@@ -673,9 +736,31 @@ export default function AlertsPage() {
                     </Td>
                     <Td fontSize="sm">{formatTimestamp(conn.timestamp)}</Td>
                     <Td fontSize="sm" color={textSecondary}>Connection</Td>
-                    <Td fontSize="sm" fontWeight="600">{conn.source_ip}</Td>
+                    <Td fontSize="sm" fontWeight="600">
+                      <Flex align="center" gap={2}>
+                        <Text noOfLines={1} title={conn.source_ip}>
+                          {formatIP(conn.source_ip)}
+                        </Text>
+                        {conn.source_ip && conn.source_ip.length > 20 && (
+                          <Badge colorScheme={getIPVersionColorScheme(getIPVersion(conn.source_ip))} fontSize="0.6rem">
+                            {getIPVersion(conn.source_ip)}
+                          </Badge>
+                        )}
+                      </Flex>
+                    </Td>
                     <Td fontSize="sm">{conn.source_port}</Td>
-                    <Td fontSize="sm" fontWeight="600">{conn.destination_ip}</Td>
+                    <Td fontSize="sm" fontWeight="600">
+                      <Flex align="center" gap={2}>
+                        <Text noOfLines={1} title={conn.destination_ip}>
+                          {formatIP(conn.destination_ip)}
+                        </Text>
+                        {conn.destination_ip && conn.destination_ip.length > 20 && (
+                          <Badge colorScheme={getIPVersionColorScheme(getIPVersion(conn.destination_ip))} fontSize="0.6rem">
+                            {getIPVersion(conn.destination_ip)}
+                          </Badge>
+                        )}
+                      </Flex>
+                    </Td>
                     <Td fontSize="sm">{conn.destination_port}</Td>
                     <Td>
                       <Badge colorScheme="blue" fontSize="0.75rem">
@@ -756,18 +841,32 @@ export default function AlertsPage() {
                   <Text fontSize="sm" fontWeight="600" color={textSecondary} mb={1}>
                     Source IP:Port
                   </Text>
-                  <Text fontSize="sm">
-                    {selectedAlert.src_ip || '—'}:{selectedAlert.src_port || '—'}
-                  </Text>
+                  <Flex align="center" gap={2}>
+                    <Text fontSize="sm" title={selectedAlert.src_ip}>
+                      {formatIP(selectedAlert.src_ip)}:{selectedAlert.src_port || '—'}
+                    </Text>
+                    {selectedAlert.src_ip && selectedAlert.src_ip.length > 20 && (
+                      <Badge colorScheme={getIPVersionColorScheme(getIPVersion(selectedAlert.src_ip))} fontSize="0.65rem">
+                        {getIPVersion(selectedAlert.src_ip)}
+                      </Badge>
+                    )}
+                  </Flex>
                 </Box>
 
                 <Box>
                   <Text fontSize="sm" fontWeight="600" color={textSecondary} mb={1}>
                     Destination IP:Port
                   </Text>
-                  <Text fontSize="sm">
-                    {selectedAlert.dest_ip || '—'}:{selectedAlert.dest_port || '—'}
-                  </Text>
+                  <Flex align="center" gap={2}>
+                    <Text fontSize="sm" title={selectedAlert.dest_ip}>
+                      {formatIP(selectedAlert.dest_ip)}:{selectedAlert.dest_port || '—'}
+                    </Text>
+                    {selectedAlert.dest_ip && selectedAlert.dest_ip.length > 20 && (
+                      <Badge colorScheme={getIPVersionColorScheme(getIPVersion(selectedAlert.dest_ip))} fontSize="0.65rem">
+                        {getIPVersion(selectedAlert.dest_ip)}
+                      </Badge>
+                    )}
+                  </Flex>
                 </Box>
 
                 <Box>
