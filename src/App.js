@@ -16,7 +16,6 @@ import UserAccounts from "./pages/platformAdmin/UserAccounts";
 import ProfileTypes from "./pages/platformAdmin/ProfileTypes";
 import Alerts from "./pages/platformAdmin/Alerts";
 
-// Network Admin layout + routes
 // CHANGE: fix folder name and use relative imports
 import NetworkAdminLayout from "./pages/networkAdmin/NetworkAdminLayout";
 import networkAdminRoutes from "./routes/networkAdminRoutes";
@@ -72,7 +71,6 @@ export default function Main() {
             </Route>
           </Route>
 
-          {/* ----------  Network Admin area (role-gated) ---------- */}
           <Route element={<ProtectedRoute roles={["Network Administrator"]} />}>
             <Route path="network-admin" element={<NetworkAdminLayout />}>
               {/* Map all Network Admin routes */}
