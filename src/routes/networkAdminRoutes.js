@@ -5,6 +5,7 @@ import {
   MdSecurity,
   MdIntegrationInstructions,
   MdSettings,
+  MdDeviceHub,
 } from "react-icons/md";
 
 // Import page components
