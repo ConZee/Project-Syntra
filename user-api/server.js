@@ -14,79 +14,15 @@ import { fileURLToPath } from 'url';
 import jwt from 'jsonwebtoken';
 import { Client as ESClient } from '@elastic/elasticsearch';
 
-// Added for Suricata auto-deployment
-import fs from 'fs/promises';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execPromise = promisify(exec);
 const SALT_ROUNDS = 10;
 
-// =========================================================
-// ENVIRONMENT CONFIGURATION
-// =========================================================
-
-// Load environment variables
-const NODE_ENV = process.env.NODE_ENV || 'development';
+// Allow overrides via environment variables
 const PORT = Number(process.env.PORT || 3001);
-
-// Security: JWT Secret (MUST be set in production)
-const JWT_SECRET = process.env.JWT_SECRET || 'syntra-secret-key';
-if (NODE_ENV === 'production' && JWT_SECRET === 'syntra-secret-key') {
-  console.error('❌ FATAL: JWT_SECRET must be set to a secure value in production!');
-  console.error('   Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
-  process.exit(1);
-}
-
-// Elasticsearch Configuration
+const JWT_SECRET = process.env.JWT_SECRET || 'syntra-secret-key'; // change in prod!
 const ELASTIC_URL = process.env.ELASTIC_URL || 'http://192.168.56.128:9200';
 
 // Create Elasticsearch client (used by /api/suricata/alerts and /api/zeek/logs)
 const es = new ESClient({ node: ELASTIC_URL });
-
-// =========================================================
-// IDS-VM REMOTE DEPLOYMENT CONFIGURATION
-// =========================================================
-
-// IDS-VM connection details (can be overridden via environment variables)
-const IDS_VM_HOST = process.env.IDS_VM_HOST || '192.168.56.10';
-const IDS_VM_USER = process.env.IDS_VM_USER || 'ids';
-const IDS_VM_SSH_KEY = process.env.IDS_VM_SSH_KEY_PATH || ''; // Optional: path to SSH private key
-const SURICATA_LOCAL_RULES = '/etc/suricata/rules/local.rules';
-const SURICATA_CONFIG = '/etc/suricata/suricata.yaml';
-const TEMP_RULES_FILE = '/tmp/local.rules';
-
-// Validate required configuration in production
-if (NODE_ENV === 'production') {
-  console.log('🔒 Running in PRODUCTION mode');
-
-  // Validate IDS-VM configuration
-  if (!IDS_VM_HOST || IDS_VM_HOST === '192.168.56.10') {
-    console.warn('⚠️  WARNING: Using default IDS_VM_HOST. Set IDS_VM_HOST in production environment!');
-  }
-
-  if (!IDS_VM_USER || IDS_VM_USER === 'ids') {
-    console.warn('⚠️  WARNING: Using default IDS_VM_USER. Set IDS_VM_USER in production environment!');
-  }
-
-  // Security warning for private network IPs in production
-  if (IDS_VM_HOST.startsWith('192.168.') || IDS_VM_HOST.startsWith('10.')) {
-    console.warn('⚠️  WARNING: IDS-VM appears to be on private network. Ensure VPN/tunnel is configured!');
-  }
-} else {
-  console.log('🔧 Running in DEVELOPMENT mode');
-}
-
-// Log configuration (excluding secrets)
-console.log('📋 Configuration:');
-console.log(`   - Environment: ${NODE_ENV}`);
-console.log(`   - Port: ${PORT}`);
-console.log(`   - Elasticsearch: ${ELASTIC_URL}`);
-console.log(`   - IDS-VM Host: ${IDS_VM_HOST}`);
-console.log(`   - IDS-VM User: ${IDS_VM_USER}`);
-if (IDS_VM_SSH_KEY) {
-  console.log(`   - IDS-VM SSH Key: ${IDS_VM_SSH_KEY}`);
-}
 
 // --- Role normalizer (unchanged) ---
 const normalizeRole = (r = '') => {
@@ -223,24 +159,6 @@ db.run(`
   else console.log('✅ Notifications table ready');
 });
 
-// Alert Notifications table (for User Stories #28-#32)
-db.run(`
-  CREATE TABLE IF NOT EXISTS alert_notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    notification_name TEXT NOT NULL,
-    notification_type TEXT NOT NULL CHECK(notification_type IN ('Email','Webhook','SMS','Slack')),
-    severity_filter TEXT NOT NULL CHECK(severity_filter IN ('Low','Medium','High','All')),
-    recipient TEXT NOT NULL,
-    enabled INTEGER DEFAULT 1 CHECK(enabled IN (0,1)),
-    created_by TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )
-`, (err) => {
-  if (err) console.error('Error creating alert_notifications table:', err);
-  else console.log('✅ Alert Notifications table ready');
-});
-
 // Dashboard Layouts table
 db.run(`
   CREATE TABLE IF NOT EXISTS dashboard_layouts (
@@ -256,119 +174,6 @@ db.run(`
   if (err) console.error('Error creating dashboard_layouts table:', err);
   else console.log('✅ Dashboard Layouts table ready');
 });
-
-// =========================================================
-// SURICATA AUTO-DEPLOYMENT HELPER FUNCTIONS
-// =========================================================
-
-/**
- * Helper: Write all enabled rules to Suricata local.rules file on IDS-VM
- * This syncs the database rules to the actual Suricata configuration via SCP/SSH
- */
-async function syncRulesToSuricata() {
-  try {
-    console.log(`📝 Syncing rules to IDS-VM (${IDS_VM_HOST})...`);
-
-    // Get all enabled rules from database
-    const sql = `SELECT * FROM ids_rules WHERE status = 'Enabled' OR status = 'Active' ORDER BY id`;
-
-    const rules = await new Promise((resolve, reject) => {
-      db.all(sql, [], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
-
-    // Build rules file content
-    let rulesContent = `# Project Syntra - Auto-generated IDS Rules
-# Generated: ${new Date().toISOString()}
-# DO NOT EDIT MANUALLY - Managed by Project Syntra Dashboard
-#
-# Total Active Rules: ${rules.length}
-#
-
-`;
-
-    rules.forEach(rule => {
-      rulesContent += `# Rule: ${rule.rule_name} (ID: ${rule.id}, SID: ${rule.rule_sid || 'N/A'})\n`;
-      rulesContent += `# Category: ${rule.category} | Severity: ${rule.severity}\n`;
-      if (rule.description) {
-        rulesContent += `# Description: ${rule.description}\n`;
-      }
-      rulesContent += `${rule.rule_content}\n\n`;
-    });
-
-    // Write to temporary file on LOGGING-VM
-    const tempLocalFile = '/tmp/project-syntra-rules.tmp';
-    await fs.writeFile(tempLocalFile, rulesContent, 'utf8');
-    console.log(`✅ Wrote ${rules.length} rules to temporary file`);
-
-    // Copy to IDS-VM via SCP
-    console.log(`📤 Copying rules to IDS-VM (${IDS_VM_HOST})...`);
-    await execPromise(`scp ${tempLocalFile} ${IDS_VM_USER}@${IDS_VM_HOST}:${TEMP_RULES_FILE}`);
-
-    // Move to correct location on IDS-VM with sudo
-    console.log(`📁 Installing rules on IDS-VM...`);
-    await execPromise(`ssh ${IDS_VM_USER}@${IDS_VM_HOST} "sudo mv ${TEMP_RULES_FILE} ${SURICATA_LOCAL_RULES}"`);
-
-    console.log(`✅ Synced ${rules.length} rules to IDS-VM`);
-
-    return { success: true, count: rules.length };
-  } catch (error) {
-    console.error('❌ Error syncing rules to IDS-VM:', error);
-    throw error;
-  }
-}
-
-/**
- * Helper: Reload Suricata on IDS-VM to apply new rules
- * Attempts reload first via SSH, falls back to restart if needed
- */
-async function reloadSuricata() {
-  try {
-    console.log(`🔄 Reloading Suricata on IDS-VM (${IDS_VM_HOST})...`);
-
-    // Reload Suricata on IDS-VM via SSH
-    await execPromise(`ssh ${IDS_VM_USER}@${IDS_VM_HOST} "sudo systemctl reload suricata"`);
-
-    console.log('✅ Suricata reloaded successfully on IDS-VM');
-    return { success: true, restarted: false };
-  } catch (error) {
-    console.error('❌ Error reloading Suricata on IDS-VM:', error);
-
-    // If reload fails, try restart as fallback
-    try {
-      console.log('⚠️ Reload failed, attempting restart...');
-      await execPromise(`ssh ${IDS_VM_USER}@${IDS_VM_HOST} "sudo systemctl restart suricata"`);
-      console.log('✅ Suricata restarted successfully on IDS-VM');
-      return { success: true, restarted: true };
-    } catch (restartError) {
-      console.error('❌ Error restarting Suricata on IDS-VM:', restartError);
-      throw restartError;
-    }
-  }
-}
-
-/**
- * Helper: Verify Suricata configuration is valid on IDS-VM
- * Returns validation result and output
- */
-async function verifySuricataConfig() {
-  try {
-    const { stdout } = await execPromise(`ssh ${IDS_VM_USER}@${IDS_VM_HOST} "sudo suricata -T -c ${SURICATA_CONFIG} 2>&1"`);
-
-    if (stdout.includes('successfully loaded') || stdout.includes('Configuration validation succeeded')) {
-      console.log('✅ IDS-VM Suricata configuration is valid');
-      return { valid: true, output: stdout };
-    } else {
-      console.error('❌ IDS-VM Suricata configuration validation failed');
-      return { valid: false, error: stdout };
-    }
-  } catch (error) {
-    console.error('❌ IDS-VM Suricata configuration validation failed:', error);
-    return { valid: false, error: error.message };
-  }
-}
 
 // JWT-based RBAC middleware
 function authorize(roles = []) {
@@ -871,6 +676,239 @@ app.get(
 );
 
 // =========================================================
+// NOTIFICATION MANAGEMENT APIs
+// =========================================================
+
+// GET all notifications
+app.get('/api/notifications', authorize(['Network Administrator']), (req, res) => {
+  const sql = `SELECT * FROM notifications ORDER BY created_at DESC`;
+
+  db.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error('[GET /api/notifications] Error:', err);
+      return res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+    res.json(rows || []);
+  });
+});
+
+// GET notification by ID
+app.get('/api/notifications/:id', authorize(['Network Administrator']), (req, res) => {
+  const { id } = req.params;
+  const sql = `SELECT * FROM notifications WHERE id = ?`;
+
+  db.get(sql, [id], (err, row) => {
+    if (err) {
+      console.error('[GET /api/notifications/:id] Error:', err);
+      return res.status(500).json({ error: 'Failed to fetch notification' });
+    }
+    if (!row) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+    res.json(row);
+  });
+});
+
+// CREATE notification
+app.post('/api/notifications', authorize(['Network Administrator']), (req, res) => {
+  const {
+    notification_name,
+    trigger_condition,
+    severity_filter,
+    delivery_method,
+    recipients,
+    message_template,
+    status = 'Enabled'
+  } = req.body;
+
+  if (!notification_name || !trigger_condition || !delivery_method || !recipients) {
+    return res.status(400).json({
+      error: 'Missing required fields: notification_name, trigger_condition, delivery_method, recipients'
+    });
+  }
+
+  const now = new Date().toISOString();
+  const sql = `
+    INSERT INTO notifications (
+      notification_name, trigger_condition, severity_filter, delivery_method,
+      recipients, message_template, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  db.run(sql, [
+    notification_name,
+    trigger_condition,
+    severity_filter || null,
+    delivery_method,
+    recipients,
+    message_template || null,
+    status,
+    now
+  ], function(err) {
+    if (err) {
+      console.error('[POST /api/notifications] Error:', err);
+      return res.status(500).json({ error: 'Failed to create notification' });
+    }
+
+    res.status(201).json({
+      id: this.lastID,
+      notification_name,
+      trigger_condition,
+      severity_filter,
+      delivery_method,
+      recipients,
+      message_template,
+      status,
+      created_at: now,
+      updated_at: null
+    });
+  });
+});
+
+// UPDATE notification
+app.put('/api/notifications/:id', authorize(['Network Administrator']), (req, res) => {
+  const { id } = req.params;
+  const {
+    notification_name,
+    trigger_condition,
+    severity_filter,
+    delivery_method,
+    recipients,
+    message_template,
+    status
+  } = req.body;
+
+  if (!notification_name || !trigger_condition || !delivery_method || !recipients) {
+    return res.status(400).json({
+      error: 'Missing required fields: notification_name, trigger_condition, delivery_method, recipients'
+    });
+  }
+
+  const now = new Date().toISOString();
+  const sql = `
+    UPDATE notifications SET
+      notification_name = ?,
+      trigger_condition = ?,
+      severity_filter = ?,
+      delivery_method = ?,
+      recipients = ?,
+      message_template = ?,
+      status = ?,
+      updated_at = ?
+    WHERE id = ?
+  `;
+
+  db.run(sql, [
+    notification_name,
+    trigger_condition,
+    severity_filter || null,
+    delivery_method,
+    recipients,
+    message_template || null,
+    status,
+    now,
+    id
+  ], function(err) {
+    if (err) {
+      console.error('[PUT /api/notifications/:id] Error:', err);
+      return res.status(500).json({ error: 'Failed to update notification' });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    // Fetch and return updated notification
+    db.get(`SELECT * FROM notifications WHERE id = ?`, [id], (err, row) => {
+      if (err || !row) {
+        return res.status(500).json({ error: 'Failed to fetch updated notification' });
+      }
+      res.json(row);
+    });
+  });
+});
+
+// DELETE notification
+app.delete('/api/notifications/:id', authorize(['Network Administrator']), (req, res) => {
+  const { id } = req.params;
+  const sql = `DELETE FROM notifications WHERE id = ?`;
+
+  db.run(sql, [id], function(err) {
+    if (err) {
+      console.error('[DELETE /api/notifications/:id] Error:', err);
+      return res.status(500).json({ error: 'Failed to delete notification' });
+    }
+
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    res.json({ success: true, message: 'Notification deleted successfully' });
+  });
+});
+
+// TOGGLE notification status (enable/disable)
+app.patch('/api/notifications/:id/toggle', authorize(['Network Administrator']), (req, res) => {
+  const { id } = req.params;
+  const now = new Date().toISOString();
+
+  // First get current status
+  db.get(`SELECT status FROM notifications WHERE id = ?`, [id], (err, row) => {
+    if (err) {
+      console.error('[PATCH /api/notifications/:id/toggle] Error:', err);
+      return res.status(500).json({ error: 'Failed to fetch notification' });
+    }
+    if (!row) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    const newStatus = row.status === 'Enabled' ? 'Disabled' : 'Enabled';
+    const sql = `UPDATE notifications SET status = ?, updated_at = ? WHERE id = ?`;
+
+    db.run(sql, [newStatus, now, id], function(err) {
+      if (err) {
+        console.error('[PATCH /api/notifications/:id/toggle] Update error:', err);
+        return res.status(500).json({ error: 'Failed to toggle notification status' });
+      }
+
+      res.json({ success: true, status: newStatus });
+    });
+  });
+});
+
+// TEST notification (simulate sending)
+app.post('/api/notifications/:id/test', authorize(['Network Administrator']), (req, res) => {
+  const { id } = req.params;
+
+  db.get(`SELECT * FROM notifications WHERE id = ?`, [id], (err, notification) => {
+    if (err) {
+      console.error('[POST /api/notifications/:id/test] Error:', err);
+      return res.status(500).json({ error: 'Failed to fetch notification' });
+    }
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    // Simulate test notification
+    console.log(`[TEST NOTIFICATION] ID: ${id}, Name: ${notification.notification_name}`);
+    console.log(`  Delivery Method: ${notification.delivery_method}`);
+    console.log(`  Recipients: ${notification.recipients}`);
+    console.log(`  Message: ${notification.message_template || 'Default message'}`);
+
+    res.json({
+      success: true,
+      message: 'Test notification sent successfully',
+      details: {
+        notification_name: notification.notification_name,
+        delivery_method: notification.delivery_method,
+        recipients: notification.recipients,
+        timestamp: new Date().toISOString()
+      }
+    });
+  });
+});
+
+// =========================================================
 // IDS RULES MANAGEMENT APIs
 // =========================================================
 
@@ -927,8 +965,8 @@ app.get('/api/ids-rules/:id', authorize(['Network Administrator', 'Security Anal
   });
 });
 
-// POST create new IDS rule (with auto-deployment to Suricata)
-app.post('/api/ids-rules', authorize(['Network Administrator']), async (req, res) => {
+// POST create new IDS rule
+app.post('/api/ids-rules', authorize(['Network Administrator']), (req, res) => {
   const { rule_name, rule_sid, category, severity, rule_content, description, status } = req.body;
 
   if (!rule_name || !category || !severity || !rule_content) {
@@ -948,7 +986,7 @@ app.post('/api/ids-rules', authorize(['Network Administrator']), async (req, res
   db.run(sql, [
     rule_name, rule_sid, category, severity, rule_content,
     description, finalStatus, created_by, now, now
-  ], async function(err) {
+  ], function(err) {
     if (err) {
       console.error('[POST /api/ids-rules] Error:', err);
       if (err.message.includes('UNIQUE constraint')) {
@@ -957,87 +995,24 @@ app.post('/api/ids-rules', authorize(['Network Administrator']), async (req, res
       return res.status(500).json({ error: 'Failed to create rule' });
     }
 
-    const ruleId = this.lastID;
-
-    // Auto-deploy to Suricata if rule is enabled/active
-    if (finalStatus === 'Enabled' || finalStatus === 'Active') {
-      try {
-        console.log(`🚀 Auto-deploying rule "${rule_name}" (ID: ${ruleId}) to Suricata...`);
-
-        // Sync all rules to Suricata
-        await syncRulesToSuricata();
-
-        // Verify configuration is valid
-        const configCheck = await verifySuricataConfig();
-        if (!configCheck.valid) {
-          return res.status(500).json({
-            error: 'Rule created but Suricata configuration is invalid. Please check rule syntax.',
-            ruleId: ruleId,
-            details: configCheck.error,
-            deployed: false
-          });
-        }
-
-        // Reload Suricata to apply changes
-        await reloadSuricata();
-
-        res.status(201).json({
-          id: ruleId,
-          message: 'Rule created and deployed to Suricata successfully',
-          deployed: true,
-          rule_name,
-          rule_sid,
-          category,
-          severity,
-          rule_content,
-          description,
-          status: finalStatus,
-          created_by,
-          created_at: now,
-          updated_at: now
-        });
-      } catch (deployError) {
-        console.error('❌ Deployment error:', deployError);
-        res.status(201).json({
-          id: ruleId,
-          message: 'Rule created but deployment to Suricata failed. Check server logs.',
-          deployed: false,
-          error: deployError.message,
-          rule_name,
-          rule_sid,
-          category,
-          severity,
-          rule_content,
-          description,
-          status: finalStatus,
-          created_by,
-          created_at: now,
-          updated_at: now
-        });
-      }
-    } else {
-      // Rule is disabled, don't deploy
-      res.status(201).json({
-        id: ruleId,
-        message: 'Rule created (disabled, not deployed to Suricata)',
-        deployed: false,
-        rule_name,
-        rule_sid,
-        category,
-        severity,
-        rule_content,
-        description,
-        status: finalStatus,
-        created_by,
-        created_at: now,
-        updated_at: now
-      });
-    }
+    res.status(201).json({
+      id: this.lastID,
+      rule_name,
+      rule_sid,
+      category,
+      severity,
+      rule_content,
+      description,
+      status: finalStatus,
+      created_by,
+      created_at: now,
+      updated_at: now
+    });
   });
 });
 
-// PUT update IDS rule (with auto-deployment to Suricata)
-app.put('/api/ids-rules/:id', authorize(['Network Administrator']), async (req, res) => {
+// PUT update IDS rule
+app.put('/api/ids-rules/:id', authorize(['Network Administrator']), (req, res) => {
   const { id } = req.params;
   const { rule_name, rule_sid, category, severity, rule_content, description, status } = req.body;
 
@@ -1056,7 +1031,7 @@ app.put('/api/ids-rules/:id', authorize(['Network Administrator']), async (req, 
   db.run(sql, [
     rule_name, rule_sid, category, severity, rule_content,
     description, status, now, id
-  ], async function(err) {
+  ], function(err) {
     if (err) {
       console.error('[PUT /api/ids-rules/:id] Error:', err);
       if (err.message.includes('UNIQUE constraint')) {
@@ -1069,54 +1044,20 @@ app.put('/api/ids-rules/:id', authorize(['Network Administrator']), async (req, 
       return res.status(404).json({ error: 'Rule not found' });
     }
 
-    // Auto-deploy to Suricata (re-sync all rules)
-    try {
-      console.log(`🚀 Re-deploying rules to Suricata after updating rule ID: ${id}...`);
-
-      await syncRulesToSuricata();
-
-      const configCheck = await verifySuricataConfig();
-      if (!configCheck.valid) {
-        return res.status(500).json({
-          error: 'Rule updated but Suricata configuration is invalid. Please check rule syntax.',
-          details: configCheck.error,
-          deployed: false
-        });
-      }
-
-      await reloadSuricata();
-
-      // Fetch and return updated rule with deployment status
-      db.get(`SELECT * FROM ids_rules WHERE id = ?`, [id], (err, row) => {
-        if (err || !row) return res.status(500).json({ error: 'Failed to fetch updated rule' });
-        res.json({
-          ...row,
-          message: 'Rule updated and deployed to Suricata successfully',
-          deployed: true
-        });
-      });
-    } catch (deployError) {
-      console.error('❌ Deployment error:', deployError);
-      // Fetch and return updated rule even if deployment failed
-      db.get(`SELECT * FROM ids_rules WHERE id = ?`, [id], (err, row) => {
-        if (err || !row) return res.status(500).json({ error: 'Failed to fetch updated rule' });
-        res.json({
-          ...row,
-          message: 'Rule updated but deployment to Suricata failed',
-          deployed: false,
-          error: deployError.message
-        });
-      });
-    }
+    // Fetch and return updated rule
+    db.get(`SELECT * FROM ids_rules WHERE id = ?`, [id], (err, row) => {
+      if (err || !row) return res.status(500).json({ error: 'Failed to fetch updated rule' });
+      res.json(row);
+    });
   });
 });
 
-// DELETE IDS rule (with auto-deployment to Suricata)
-app.delete('/api/ids-rules/:id', authorize(['Network Administrator']), async (req, res) => {
+// DELETE IDS rule
+app.delete('/api/ids-rules/:id', authorize(['Network Administrator']), (req, res) => {
   const { id } = req.params;
   const sql = `DELETE FROM ids_rules WHERE id = ?`;
 
-  db.run(sql, [id], async function(err) {
+  db.run(sql, [id], function(err) {
     if (err) {
       console.error('[DELETE /api/ids-rules/:id] Error:', err);
       return res.status(500).json({ error: 'Failed to delete rule' });
@@ -1126,195 +1067,187 @@ app.delete('/api/ids-rules/:id', authorize(['Network Administrator']), async (re
       return res.status(404).json({ error: 'Rule not found' });
     }
 
-    // Auto-deploy to Suricata (remove deleted rule from rules file)
-    try {
-      console.log(`🚀 Removing rule ID ${id} from Suricata...`);
-
-      await syncRulesToSuricata();
-      await reloadSuricata();
-
-      res.json({
-        success: true,
-        message: 'Rule deleted and removed from Suricata successfully',
-        deployed: true
-      });
-    } catch (deployError) {
-      console.error('❌ Deployment error:', deployError);
-      res.json({
-        success: true,
-        message: 'Rule deleted from database but Suricata update failed',
-        deployed: false,
-        error: deployError.message
-      });
-    }
+    res.json({ success: true, message: 'Rule deleted successfully' });
   });
 });
 
-// Manual sync endpoint - Re-deploy all rules to Suricata
-app.post('/api/ids-rules/sync-to-suricata', authorize(['Network Administrator', 'Platform Administrator']), async (req, res) => {
+// =========================================================
+// SYSTEM HEALTH & MONITORING ROUTES
+// =========================================================
+
+// GET /api/health/ids - Check IDS health status
+app.get('/api/health/ids', authorize(['Platform Administrator', 'Security Analyst']), async (req, res) => {
+  const health = {
+    suricata: 'unknown',
+    zeek: 'unknown',
+    lastCheck: new Date().toISOString()
+  };
+
   try {
-    console.log('🔄 Manual sync initiated by', req.user.username);
+    // Check if Suricata data exists in filebeat indices (with recent data in last 10 minutes)
+    const suricataCheck = await es.search({
+      index: ['filebeat-*', '.ds-filebeat-*'],
+      size: 1,
+      sort: [{ '@timestamp': { order: 'desc' } }],
+      query: {
+        bool: {
+          must: [
+            { match: { 'event.module': 'suricata' } }
+          ],
+          filter: [
+            { range: { '@timestamp': { gte: 'now-10m' } } }
+          ]
+        }
+      }
+    }).catch(() => null);
 
-    // Sync rules to file
-    const syncResult = await syncRulesToSuricata();
+    if (suricataCheck && suricataCheck.hits?.hits?.length > 0) {
+      health.suricata = 'online';
+    } else {
+      // Check if any Suricata data exists (even if old)
+      const anyData = await es.search({
+        index: ['filebeat-*', '.ds-filebeat-*'],
+        size: 1,
+        query: { match: { 'event.module': 'suricata' } }
+      }).catch(() => null);
+      health.suricata = anyData?.hits?.hits?.length > 0 ? 'stale' : 'offline';
+    }
 
-    // Verify config is valid
-    const configCheck = await verifySuricataConfig();
-    if (!configCheck.valid) {
-      return res.status(500).json({
-        error: 'Suricata configuration validation failed',
-        details: configCheck.error,
-        stderr: configCheck.stderr
+    // Check if Zeek data exists in filebeat indices (with recent data in last 10 minutes)
+    const zeekCheck = await es.search({
+      index: ['filebeat-*', '.ds-filebeat-*'],
+      size: 1,
+      sort: [{ '@timestamp': { order: 'desc' } }],
+      query: {
+        bool: {
+          must: [
+            { match: { 'event.module': 'zeek' } }
+          ],
+          filter: [
+            { range: { '@timestamp': { gte: 'now-10m' } } }
+          ]
+        }
+      }
+    }).catch(() => null);
+
+    if (zeekCheck && zeekCheck.hits?.hits?.length > 0) {
+      health.zeek = 'online';
+    } else {
+      // Check if any Zeek data exists (even if old)
+      const anyData = await es.search({
+        index: ['filebeat-*', '.ds-filebeat-*'],
+        size: 1,
+        query: { match: { 'event.module': 'zeek' } }
+      }).catch(() => null);
+      health.zeek = anyData?.hits?.hits?.length > 0 ? 'stale' : 'offline';
+    }
+
+    res.json(health);
+  } catch (err) {
+    console.error('[GET /api/health/ids] Error:', err);
+    res.json(health); // Return unknown status on error
+  }
+});
+
+// Enhanced GET /api/health - System health with detailed info
+app.get('/api/health', async (req, res) => {
+  const health = {
+    status: 'healthy',
+    uptime: process.uptime(),
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'production',
+    elasticsearch: 'unknown',
+    database: 'online',
+    timestamp: new Date().toISOString()
+  };
+
+  // Check Elasticsearch
+  try {
+    await es.ping();
+    health.elasticsearch = 'online';
+  } catch (err) {
+    health.elasticsearch = 'offline';
+    health.status = 'degraded';
+  }
+
+  // Check database
+  try {
+    await new Promise((resolve, reject) => {
+      db.get('SELECT 1', (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    health.database = 'online';
+  } catch (err) {
+    health.database = 'offline';
+    health.status = 'critical';
+  }
+
+  res.json(health);
+});
+
+// GET /api/system/alerts - Get system-level alerts
+app.get('/api/system/alerts', authorize(['Platform Administrator', 'Security Analyst']), async (req, res) => {
+  const alerts = [];
+  const now = new Date();
+
+  try {
+    // Check Elasticsearch health
+    try {
+      await es.ping();
+    } catch (err) {
+      alerts.push({
+        type: 'Database Health',
+        severity: 'critical',
+        message: 'Elasticsearch is not responding',
+        timestamp: now.toISOString(),
+        source: 'Database Monitor'
       });
     }
 
-    // Reload Suricata
-    const reloadResult = await reloadSuricata();
-
-    res.json({
-      success: true,
-      message: 'All rules synced to Suricata successfully',
-      rulesCount: syncResult.count,
-      restarted: reloadResult.restarted || false,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ Manual sync error:', error);
-    res.status(500).json({
-      error: 'Failed to sync rules to Suricata',
-      details: error.message
-    });
-  }
-});
-
-// =========================================================
-// ALERT NOTIFICATIONS APIs (User Stories #28-#32)
-// =========================================================
-
-// GET all alert notifications
-app.get('/api/alert-notifications', authorize(['Network Administrator']), (req, res) => {
-  const sql = `SELECT * FROM alert_notifications ORDER BY created_at DESC`;
-
-  db.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error('[GET /api/alert-notifications] Error:', err);
-      return res.status(500).json({ error: 'Failed to fetch notifications' });
-    }
-    res.json(rows);
-  });
-});
-
-// SEARCH alert notifications
-app.get('/api/alert-notifications/search', authorize(['Network Administrator']), (req, res) => {
-  const { q } = req.query;
-
-  if (!q) {
-    return res.status(400).json({ error: 'Search query required' });
-  }
-
-  const searchTerm = `%${q}%`;
-  const sql = `
-    SELECT * FROM alert_notifications
-    WHERE notification_name LIKE ? OR notification_type LIKE ? OR recipient LIKE ?
-    ORDER BY created_at DESC
-  `;
-
-  db.all(sql, [searchTerm, searchTerm, searchTerm], (err, rows) => {
-    if (err) {
-      console.error('[GET /api/alert-notifications/search] Error:', err);
-      return res.status(500).json({ error: 'Search failed' });
-    }
-    res.json(rows);
-  });
-});
-
-// GET single alert notification
-app.get('/api/alert-notifications/:id', authorize(['Network Administrator']), (req, res) => {
-  const { id } = req.params;
-  const sql = `SELECT * FROM alert_notifications WHERE id = ?`;
-
-  db.get(sql, [id], (err, row) => {
-    if (err) {
-      console.error('[GET /api/alert-notifications/:id] Error:', err);
-      return res.status(500).json({ error: 'Failed to fetch notification' });
-    }
-    if (!row) return res.status(404).json({ error: 'Notification not found' });
-    res.json(row);
-  });
-});
-
-// CREATE new alert notification
-app.post('/api/alert-notifications', authorize(['Network Administrator']), (req, res) => {
-  const { notification_name, notification_type, severity_filter, recipient, enabled } = req.body;
-
-  if (!notification_name || !notification_type || !severity_filter || !recipient) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
-  const now = new Date().toISOString();
-  const sql = `
-    INSERT INTO alert_notifications
-    (notification_name, notification_type, severity_filter, recipient, enabled, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `;
-
-  db.run(
-    sql,
-    [notification_name, notification_type, severity_filter, recipient, enabled ? 1 : 0, req.user.username, now, now],
-    function (err) {
-      if (err) {
-        console.error('[POST /api/alert-notifications] Error:', err);
-        return res.status(500).json({ error: 'Failed to create notification' });
+    // Check for recent suspicious account activity
+    db.all(
+      `SELECT COUNT(*) as count FROM users WHERE joined_at > datetime('now', '-1 hour')`,
+      [],
+      (err, rows) => {
+        if (!err && rows[0]?.count > 5) {
+          alerts.push({
+            type: 'Account Activity',
+            severity: 'medium',
+            message: `${rows[0].count} accounts created in the last hour`,
+            timestamp: now.toISOString(),
+            source: 'User Monitor'
+          });
+        }
       }
-      res.status(201).json({ id: this.lastID, message: 'Notification created successfully' });
+    );
+
+    res.json(alerts);
+  } catch (err) {
+    console.error('[GET /api/system/alerts] Error:', err);
+    res.json(alerts); // Return any alerts collected so far
+  }
+});
+
+// GET /api/users/recent - Get recently created users
+app.get('/api/users/recent', authorize(['Platform Administrator', 'Security Analyst']), (req, res) => {
+  const days = parseInt(req.query.days) || 1;
+
+  db.all(
+    `SELECT id, name, email, role, status, joined_at as created_at, last_active
+     FROM users
+     WHERE joined_at > datetime('now', '-${days} days')
+     ORDER BY joined_at DESC`,
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error('[GET /api/users/recent] DB error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+      res.json(rows || []);
     }
   );
-});
-
-// UPDATE alert notification
-app.put('/api/alert-notifications/:id', authorize(['Network Administrator']), (req, res) => {
-  const { id } = req.params;
-  const { notification_name, notification_type, severity_filter, recipient, enabled } = req.body;
-
-  if (!notification_name || !notification_type || !severity_filter || !recipient) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
-  const now = new Date().toISOString();
-  const sql = `
-    UPDATE alert_notifications
-    SET notification_name = ?, notification_type = ?, severity_filter = ?,
-        recipient = ?, enabled = ?, updated_at = ?
-    WHERE id = ?
-  `;
-
-  db.run(
-    sql,
-    [notification_name, notification_type, severity_filter, recipient, enabled ? 1 : 0, now, id],
-    function (err) {
-      if (err) {
-        console.error('[PUT /api/alert-notifications/:id] Error:', err);
-        return res.status(500).json({ error: 'Failed to update notification' });
-      }
-      if (this.changes === 0) return res.status(404).json({ error: 'Notification not found' });
-      res.json({ message: 'Notification updated successfully' });
-    }
-  );
-});
-
-// DELETE alert notification
-app.delete('/api/alert-notifications/:id', authorize(['Network Administrator']), (req, res) => {
-  const { id } = req.params;
-  const sql = `DELETE FROM alert_notifications WHERE id = ?`;
-
-  db.run(sql, [id], function (err) {
-    if (err) {
-      console.error('[DELETE /api/alert-notifications/:id] Error:', err);
-      return res.status(500).json({ error: 'Failed to delete notification' });
-    }
-    if (this.changes === 0) return res.status(404).json({ error: 'Notification not found' });
-    res.json({ message: 'Notification deleted successfully' });
-  });
 });
 
 // =========================================================
