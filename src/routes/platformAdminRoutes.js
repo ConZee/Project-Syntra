@@ -25,7 +25,7 @@ const platformAdminRoutes = [
     roles: ["Platform Administrator"],
   },
   {
-    name: "Alerts & Notifications",
+    name: "Alerts",
     layout: "/platform-admin",
     path: "/alerts",
     icon: <FiBell />,

@@ -16,7 +16,7 @@ import UserAccounts from "./pages/platformAdmin/UserAccounts";
 import ProfileTypes from "./pages/platformAdmin/ProfileTypes";
 import Alerts from "./pages/platformAdmin/Alerts";
 
-// ⭐ Network Admin layout + routes
+// Network Admin layout + routes
 // CHANGE: fix folder name and use relative imports
 import NetworkAdminLayout from "./pages/networkAdmin/NetworkAdminLayout";
 import networkAdminRoutes from "./routes/networkAdminRoutes";
@@ -62,21 +62,17 @@ export default function Main() {
           </Route>
 
           {/* ---------- Platform Admin area (role-gated) ---------- */}
-          <Route element={<ProtectedRoute roles={["Platform Administrator"]} />}>
+          <Route element={<ProtectedRoute roles={["Platform Administrator", "Security Analyst"]} />}>
             <Route path="platform-admin" element={<PlatformAdminLayout />}>
               <Route index element={<DashboardHome />} />
               <Route path="dashboard" element={<DashboardHome />} />
               <Route path="users" element={<UserAccounts />} />
               <Route path="profile-types" element={<ProfileTypes />} />
+              <Route path="alerts" element={<Alerts />} />
             </Route>
           </Route>
 
-          {/* Alerts shared by Platform Admin + Security Analyst */}
-          <Route element={<ProtectedRoute roles={["Platform Administrator", "Security Analyst"]} />}>
-            <Route path="platform-admin/alerts" element={<Alerts />} />
-          </Route>
-
-          {/* ---------- ⭐ Network Admin area (role-gated) ---------- */}
+          {/* ----------  Network Admin area (role-gated) ---------- */}
           <Route element={<ProtectedRoute roles={["Network Administrator"]} />}>
             <Route path="network-admin" element={<NetworkAdminLayout />}>
               {/* Map all Network Admin routes */}

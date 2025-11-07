@@ -152,22 +152,12 @@ export default function IDSRuleManagement() {
   const handleSubmitAdd = async () => {
     try {
       setIsSubmitting(true);
-      const response = await createIDSRule(formData);
-
-      // Show deployment status in toast
-      const deploymentMsg = response.deployed
-        ? ' and deployed to Suricata'
-        : (formData.status === 'Active' || formData.status === 'Enabled')
-          ? ' (deployment failed - check server logs)'
-          : ' (not deployed - rule is disabled)';
-
+      await createIDSRule(formData);
       toast({
-        title: 'IDS rule has been successfully created' + deploymentMsg,
-        description: response.deployed
-          ? 'Rule is now actively monitoring your network'
-          : response.message,
-        status: response.deployed ? 'success' : 'warning',
-        duration: 5000,
+        title: 'Rule created',
+        description: 'IDS rule has been created successfully',
+        status: 'success',
+        duration: 3000,
         isClosable: true,
       });
       onAddClose();
@@ -188,20 +178,12 @@ export default function IDSRuleManagement() {
   const handleSubmitEdit = async () => {
     try {
       setIsSubmitting(true);
-      const response = await updateIDSRule(selectedRule.id, formData);
-
-      // Show deployment status in toast
-      const deploymentMsg = response.deployed
-        ? ' and deployed to Suricata'
-        : ' (deployment to Suricata failed)';
-
+      await updateIDSRule(selectedRule.id, formData);
       toast({
-        title: 'IDS Rule has been updated successfully' + deploymentMsg,
-        description: response.deployed
-          ? 'Updated rule is now active in network monitoring'
-          : response.message || 'Check server logs for details',
-        status: response.deployed ? 'success' : 'warning',
-        duration: 5000,
+        title: 'Rule updated',
+        description: 'IDS rule has been updated successfully',
+        status: 'success',
+        duration: 3000,
         isClosable: true,
       });
       onEditClose();
@@ -222,20 +204,12 @@ export default function IDSRuleManagement() {
   const handleConfirmDelete = async () => {
     try {
       setIsSubmitting(true);
-      const response = await deleteIDSRule(selectedRule.id);
-
-      // Show deployment status in toast
-      const deploymentMsg = response.deployed
-        ? ' and removed from Suricata'
-        : ' (removal from Suricata failed)';
-
+      await deleteIDSRule(selectedRule.id);
       toast({
-        title: 'IDS rule has been successfully deleted' + deploymentMsg,
-        description: response.deployed
-          ? 'Rule is no longer monitoring network traffic'
-          : response.message || 'Check server logs for details',
-        status: response.deployed ? 'success' : 'warning',
-        duration: 5000,
+        title: 'Rule deleted',
+        description: 'IDS rule has been deleted successfully',
+        status: 'success',
+        duration: 3000,
         isClosable: true,
       });
       onDeleteClose();
@@ -347,7 +321,7 @@ export default function IDSRuleManagement() {
               </Thead>
               <Tbody>
                 {rules.map((rule) => (
-                  <Tr key={rule.id}>
+                  <Tr key={rule.id} _hover={bgHover}>
                     <Td borderColor={borderColor}>
                       <Text color={textColor} fontSize="sm" fontWeight="700">
                         {rule.rule_name}

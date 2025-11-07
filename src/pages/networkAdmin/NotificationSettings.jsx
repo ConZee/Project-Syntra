@@ -27,6 +27,7 @@ import {
   FormControl,
   FormLabel,
   Select,
+  Textarea,
   useDisclosure,
   AlertDialog,
   AlertDialogBody,
@@ -35,23 +36,16 @@ import {
   AlertDialogContent,
   AlertDialogOverlay,
   Spinner,
-  Switch,
 } from '@chakra-ui/react';
 import { MdAdd, MdEdit, MdDelete, MdSearch } from 'react-icons/md';
 import Card from 'components/card/Card';
-import {
-  fetchAlertNotifications,
-  createAlertNotification,
-  updateAlertNotification,
-  deleteAlertNotification,
-  searchAlertNotifications
-} from 'backend_api';
+import { getIDSRules, createIDSRule, updateIDSRule, deleteIDSRule, searchIDSRules } from 'backend_api';
 
-export default function NotificationSettings() {
-  const [notifications, setNotifications] = useState([]);
+export default function IDSRuleManagement() {
+  const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedNotification, setSelectedNotification] = useState(null);
+  const [selectedRule, setSelectedRule] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
@@ -59,11 +53,13 @@ export default function NotificationSettings() {
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
 
   const [formData, setFormData] = useState({
-    notification_name: '',
-    notification_type: 'Email',
-    severity_filter: 'High',
-    recipient: '',
-    enabled: true
+    rule_name: '',
+    rule_sid: '',
+    category: '',
+    severity: '',
+    rule_content: '',
+    description: '',
+    status: 'Active',
   });
 
   const toast = useToast();
@@ -75,19 +71,19 @@ export default function NotificationSettings() {
   const bgHover = useColorModeValue({ bg: 'secondaryGray.400' }, { bg: 'whiteAlpha.50' });
   const bgFocus = useColorModeValue({ bg: 'secondaryGray.300' }, { bg: 'whiteAlpha.100' });
 
-  // Fetch all notifications on component mount
+  // Fetch all rules on component mount
   useEffect(() => {
-    loadNotifications();
+    fetchRules();
   }, []);
 
-  const loadNotifications = async () => {
+  const fetchRules = async () => {
     try {
       setLoading(true);
-      const data = await fetchAlertNotifications();
-      setNotifications(data);
+      const data = await getIDSRules();
+      setRules(data);
     } catch (error) {
       toast({
-        title: 'Error loading notifications',
+        title: 'Error fetching rules',
         description: error.message,
         status: 'error',
         duration: 5000,
@@ -100,14 +96,14 @@ export default function NotificationSettings() {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
-      loadNotifications();
+      fetchRules();
       return;
     }
 
     try {
       setLoading(true);
-      const data = await searchAlertNotifications(searchQuery);
-      setNotifications(data);
+      const data = await searchIDSRules(searchQuery);
+      setRules(data);
     } catch (error) {
       toast({
         title: 'Search failed',
@@ -123,47 +119,52 @@ export default function NotificationSettings() {
 
   const handleAdd = () => {
     setFormData({
-      notification_name: '',
-      notification_type: 'Email',
-      severity_filter: 'High',
-      recipient: '',
-      enabled: true
+      rule_name: '',
+      rule_sid: '',
+      category: '',
+      severity: '',
+      rule_content: '',
+      description: '',
+      status: 'Active',
     });
     onAddOpen();
   };
 
-  const handleEdit = (notification) => {
-    setSelectedNotification(notification);
+  const handleEdit = (rule) => {
+    setSelectedRule(rule);
     setFormData({
-      notification_name: notification.notification_name,
-      notification_type: notification.notification_type,
-      severity_filter: notification.severity_filter,
-      recipient: notification.recipient,
-      enabled: notification.enabled === 1
+      rule_name: rule.rule_name,
+      rule_sid: rule.rule_sid || '',
+      category: rule.category,
+      severity: rule.severity,
+      rule_content: rule.rule_content,
+      description: rule.description || '',
+      status: rule.status,
     });
     onEditOpen();
   };
 
-  const handleDeleteClick = (notification) => {
-    setSelectedNotification(notification);
+  const handleDeleteClick = (rule) => {
+    setSelectedRule(rule);
     onDeleteOpen();
   };
 
   const handleSubmitAdd = async () => {
     try {
       setIsSubmitting(true);
-      await createAlertNotification(formData);
+      await createIDSRule(formData);
       toast({
-        title: 'Alert/Notification has been successfully created',
+        title: 'Rule created',
+        description: 'IDS rule has been created successfully',
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
       onAddClose();
-      loadNotifications();
+      fetchRules();
     } catch (error) {
       toast({
-        title: 'Error creating notification',
+        title: 'Error creating rule',
         description: error.message,
         status: 'error',
         duration: 5000,
@@ -177,18 +178,19 @@ export default function NotificationSettings() {
   const handleSubmitEdit = async () => {
     try {
       setIsSubmitting(true);
-      await updateAlertNotification(selectedNotification.id, formData);
+      await updateIDSRule(selectedRule.id, formData);
       toast({
-        title: 'IDS Rule has been updated successfully',
+        title: 'Rule updated',
+        description: 'IDS rule has been updated successfully',
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
       onEditClose();
-      loadNotifications();
+      fetchRules();
     } catch (error) {
       toast({
-        title: 'Error updating notification',
+        title: 'Error updating rule',
         description: error.message,
         status: 'error',
         duration: 5000,
@@ -202,18 +204,19 @@ export default function NotificationSettings() {
   const handleConfirmDelete = async () => {
     try {
       setIsSubmitting(true);
-      await deleteAlertNotification(selectedNotification.id);
+      await deleteIDSRule(selectedRule.id);
       toast({
-        title: 'Alert/Notification has been successfully deleted',
+        title: 'Rule deleted',
+        description: 'IDS rule has been deleted successfully',
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
       onDeleteClose();
-      loadNotifications();
+      fetchRules();
     } catch (error) {
       toast({
-        title: 'Error deleting notification',
+        title: 'Error deleting rule',
         description: error.message,
         status: 'error',
         duration: 5000,
@@ -224,21 +227,6 @@ export default function NotificationSettings() {
     }
   };
 
-  const getTypeColor = (type) => {
-    switch (type) {
-      case 'Email':
-        return 'blue';
-      case 'Webhook':
-        return 'purple';
-      case 'SMS':
-        return 'green';
-      case 'Slack':
-        return 'orange';
-      default:
-        return 'gray';
-    }
-  };
-
   const getSeverityColor = (severity) => {
     switch (severity) {
       case 'High':
@@ -246,12 +234,14 @@ export default function NotificationSettings() {
       case 'Medium':
         return 'orange';
       case 'Low':
-        return 'yellow';
-      case 'All':
-        return 'blue';
+        return 'green';
       default:
         return 'gray';
     }
+  };
+
+  const getStatusColor = (status) => {
+    return status === 'Active' ? 'green' : 'gray';
   };
 
   return (
@@ -264,21 +254,16 @@ export default function NotificationSettings() {
       >
         {/* Header */}
         <Flex px="25px" justify="space-between" mb="20px" align="center">
-          <Box>
-            <Text color={textColor} fontSize="22px" fontWeight="700" lineHeight="100%">
-              Alert Notifications
-            </Text>
-            <Text color="secondaryGray.600" fontSize="sm" mt="5px">
-              Configure alert delivery channels and thresholds
-            </Text>
-          </Box>
+          <Text color={textColor} fontSize="22px" fontWeight="700" lineHeight="100%">
+            IDS Rule Management
+          </Text>
           <Button
             leftIcon={<MdAdd />}
             colorScheme="brand"
             variant="solid"
             onClick={handleAdd}
           >
-            Add Notification
+            Add New Rule
           </Button>
         </Flex>
 
@@ -289,7 +274,7 @@ export default function NotificationSettings() {
               <MdSearch color="gray" />
             </InputLeftElement>
             <Input
-              placeholder="Search by name, type, or recipient..."
+              placeholder="Search by rule name, SID, category..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -302,7 +287,7 @@ export default function NotificationSettings() {
             <Button
               onClick={() => {
                 setSearchQuery('');
-                loadNotifications();
+                fetchRules();
               }}
             >
               Clear
@@ -315,10 +300,10 @@ export default function NotificationSettings() {
           <Flex justify="center" align="center" py="40px">
             <Spinner size="xl" color="brand.500" />
           </Flex>
-        ) : notifications.length === 0 ? (
+        ) : rules.length === 0 ? (
           <Flex justify="center" align="center" py="40px">
             <Text color={textColor} fontSize="md">
-              {searchQuery ? 'No notifications found matching your search' : 'No notifications configured yet. Click "Add Notification" to create one.'}
+              No rules found. Click "Add New Rule" to create one.
             </Text>
           </Flex>
         ) : (
@@ -326,60 +311,60 @@ export default function NotificationSettings() {
             <Table variant="simple" color="gray.500" mb="24px">
               <Thead>
                 <Tr>
-                  <Th borderColor={borderColor}>Notification Name</Th>
-                  <Th borderColor={borderColor}>Type</Th>
-                  <Th borderColor={borderColor}>Severity Filter</Th>
-                  <Th borderColor={borderColor}>Recipient</Th>
+                  <Th borderColor={borderColor}>Rule Name</Th>
+                  <Th borderColor={borderColor}>Rule SID</Th>
+                  <Th borderColor={borderColor}>Category</Th>
+                  <Th borderColor={borderColor}>Severity</Th>
                   <Th borderColor={borderColor}>Status</Th>
                   <Th borderColor={borderColor}>Actions</Th>
                 </Tr>
               </Thead>
               <Tbody>
-                {notifications.map((notif) => (
-                  <Tr key={notif.id}>
+                {rules.map((rule) => (
+                  <Tr key={rule.id} _hover={bgHover}>
                     <Td borderColor={borderColor}>
                       <Text color={textColor} fontSize="sm" fontWeight="700">
-                        {notif.notification_name}
+                        {rule.rule_name}
                       </Text>
-                    </Td>
-                    <Td borderColor={borderColor}>
-                      <Badge colorScheme={getTypeColor(notif.notification_type)}>
-                        {notif.notification_type}
-                      </Badge>
-                    </Td>
-                    <Td borderColor={borderColor}>
-                      <Badge colorScheme={getSeverityColor(notif.severity_filter)}>
-                        {notif.severity_filter}
-                      </Badge>
                     </Td>
                     <Td borderColor={borderColor}>
                       <Text color={textColor} fontSize="sm">
-                        {notif.recipient}
+                        {rule.rule_sid || 'N/A'}
                       </Text>
                     </Td>
                     <Td borderColor={borderColor}>
-                      <Badge colorScheme={notif.enabled ? 'green' : 'gray'}>
-                        {notif.enabled ? 'Enabled' : 'Disabled'}
+                      <Text color={textColor} fontSize="sm">
+                        {rule.category}
+                      </Text>
+                    </Td>
+                    <Td borderColor={borderColor}>
+                      <Badge colorScheme={getSeverityColor(rule.severity)}>
+                        {rule.severity}
+                      </Badge>
+                    </Td>
+                    <Td borderColor={borderColor}>
+                      <Badge colorScheme={getStatusColor(rule.status)}>
+                        {rule.status}
                       </Badge>
                     </Td>
                     <Td borderColor={borderColor}>
                       <Flex gap="8px">
                         <IconButton
                           icon={<MdEdit />}
-                          aria-label="Edit notification"
+                          aria-label="Edit rule"
                           size="sm"
-                          onClick={() => handleEdit(notif)}
+                          onClick={() => handleEdit(rule)}
                           bg={bgButton}
                           _hover={bgHover}
                           _focus={bgFocus}
                         />
                         <IconButton
                           icon={<MdDelete />}
-                          aria-label="Delete notification"
+                          aria-label="Delete rule"
                           size="sm"
                           colorScheme="red"
                           variant="ghost"
-                          onClick={() => handleDeleteClick(notif)}
+                          onClick={() => handleDeleteClick(rule)}
                         />
                       </Flex>
                     </Td>
@@ -391,69 +376,91 @@ export default function NotificationSettings() {
         )}
       </Card>
 
-      {/* Add Notification Modal */}
-      <Modal isOpen={isAddOpen} onClose={onAddClose} size="lg">
+      {/* Add Rule Modal */}
+      <Modal isOpen={isAddOpen} onClose={onAddClose} size="xl">
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Create Alert Notification</ModalHeader>
+          <ModalHeader>Add New IDS Rule</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             <FormControl isRequired mb={4}>
-              <FormLabel>Notification Name</FormLabel>
+              <FormLabel>Rule Name</FormLabel>
               <Input
-                placeholder="e.g., High Severity Alerts"
-                value={formData.notification_name}
-                onChange={(e) => setFormData({ ...formData, notification_name: e.target.value })}
+                placeholder="Enter rule name"
+                value={formData.rule_name}
+                onChange={(e) => setFormData({ ...formData, rule_name: e.target.value })}
+              />
+            </FormControl>
+
+            <FormControl mb={4}>
+              <FormLabel>Rule SID</FormLabel>
+              <Input
+                placeholder="Enter rule SID (optional)"
+                value={formData.rule_sid}
+                onChange={(e) => setFormData({ ...formData, rule_sid: e.target.value })}
               />
             </FormControl>
 
             <FormControl isRequired mb={4}>
-              <FormLabel>Notification Type</FormLabel>
+              <FormLabel>Category</FormLabel>
               <Select
-                value={formData.notification_type}
-                onChange={(e) => setFormData({ ...formData, notification_type: e.target.value })}
+                placeholder="Select category"
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               >
-                <option value="Email">Email</option>
-                <option value="Webhook">Webhook</option>
-                <option value="SMS">SMS</option>
-                <option value="Slack">Slack</option>
+                <option value="Malware">Malware</option>
+                <option value="Intrusion">Intrusion</option>
+                <option value="DDoS">DDoS</option>
+                <option value="SQL Injection">SQL Injection</option>
+                <option value="XSS">XSS</option>
+                <option value="Brute Force">Brute Force</option>
+                <option value="Port Scan">Port Scan</option>
+                <option value="Other">Other</option>
               </Select>
             </FormControl>
 
             <FormControl isRequired mb={4}>
-              <FormLabel>Severity Filter</FormLabel>
+              <FormLabel>Severity</FormLabel>
               <Select
-                value={formData.severity_filter}
-                onChange={(e) => setFormData({ ...formData, severity_filter: e.target.value })}
+                placeholder="Select severity"
+                value={formData.severity}
+                onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
               >
-                <option value="All">All Severities</option>
-                <option value="High">High Only</option>
-                <option value="Medium">Medium and Above</option>
-                <option value="Low">Low and Above</option>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
               </Select>
             </FormControl>
 
             <FormControl isRequired mb={4}>
-              <FormLabel>Recipient</FormLabel>
-              <Input
-                placeholder={
-                  formData.notification_type === 'Email' ? 'admin@company.com' :
-                  formData.notification_type === 'Webhook' ? 'https://hooks.slack.com/...' :
-                  formData.notification_type === 'SMS' ? '+1234567890' :
-                  '#security-alerts'
-                }
-                value={formData.recipient}
-                onChange={(e) => setFormData({ ...formData, recipient: e.target.value })}
+              <FormLabel>Rule Content</FormLabel>
+              <Textarea
+                placeholder="Enter rule content/signature"
+                value={formData.rule_content}
+                onChange={(e) => setFormData({ ...formData, rule_content: e.target.value })}
+                rows={4}
               />
             </FormControl>
 
-            <FormControl display="flex" alignItems="center">
-              <FormLabel mb="0">Enable Notification</FormLabel>
-              <Switch
-                isChecked={formData.enabled}
-                onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                colorScheme="green"
+            <FormControl mb={4}>
+              <FormLabel>Description</FormLabel>
+              <Textarea
+                placeholder="Enter rule description (optional)"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
               />
+            </FormControl>
+
+            <FormControl>
+              <FormLabel>Status</FormLabel>
+              <Select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </Select>
             </FormControl>
           </ModalBody>
 
@@ -465,70 +472,99 @@ export default function NotificationSettings() {
               colorScheme="brand"
               onClick={handleSubmitAdd}
               isLoading={isSubmitting}
-              isDisabled={!formData.notification_name || !formData.recipient}
+              isDisabled={!formData.rule_name || !formData.category || !formData.severity || !formData.rule_content}
             >
-              Create
+              Create Rule
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      {/* Edit Notification Modal */}
-      <Modal isOpen={isEditOpen} onClose={onEditClose} size="lg">
+      {/* Edit Rule Modal */}
+      <Modal isOpen={isEditOpen} onClose={onEditClose} size="xl">
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Update Alert Notification</ModalHeader>
+          <ModalHeader>Edit IDS Rule</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
             <FormControl isRequired mb={4}>
-              <FormLabel>Notification Name</FormLabel>
+              <FormLabel>Rule Name</FormLabel>
               <Input
-                value={formData.notification_name}
-                onChange={(e) => setFormData({ ...formData, notification_name: e.target.value })}
+                placeholder="Enter rule name"
+                value={formData.rule_name}
+                onChange={(e) => setFormData({ ...formData, rule_name: e.target.value })}
+              />
+            </FormControl>
+
+            <FormControl mb={4}>
+              <FormLabel>Rule SID</FormLabel>
+              <Input
+                placeholder="Enter rule SID (optional)"
+                value={formData.rule_sid}
+                onChange={(e) => setFormData({ ...formData, rule_sid: e.target.value })}
               />
             </FormControl>
 
             <FormControl isRequired mb={4}>
-              <FormLabel>Notification Type</FormLabel>
+              <FormLabel>Category</FormLabel>
               <Select
-                value={formData.notification_type}
-                onChange={(e) => setFormData({ ...formData, notification_type: e.target.value })}
+                placeholder="Select category"
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               >
-                <option value="Email">Email</option>
-                <option value="Webhook">Webhook</option>
-                <option value="SMS">SMS</option>
-                <option value="Slack">Slack</option>
+                <option value="Malware">Malware</option>
+                <option value="Intrusion">Intrusion</option>
+                <option value="DDoS">DDoS</option>
+                <option value="SQL Injection">SQL Injection</option>
+                <option value="XSS">XSS</option>
+                <option value="Brute Force">Brute Force</option>
+                <option value="Port Scan">Port Scan</option>
+                <option value="Other">Other</option>
               </Select>
             </FormControl>
 
             <FormControl isRequired mb={4}>
-              <FormLabel>Severity Filter</FormLabel>
+              <FormLabel>Severity</FormLabel>
               <Select
-                value={formData.severity_filter}
-                onChange={(e) => setFormData({ ...formData, severity_filter: e.target.value })}
+                placeholder="Select severity"
+                value={formData.severity}
+                onChange={(e) => setFormData({ ...formData, severity: e.target.value })}
               >
-                <option value="All">All Severities</option>
-                <option value="High">High Only</option>
-                <option value="Medium">Medium and Above</option>
-                <option value="Low">Low and Above</option>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
               </Select>
             </FormControl>
 
             <FormControl isRequired mb={4}>
-              <FormLabel>Recipient</FormLabel>
-              <Input
-                value={formData.recipient}
-                onChange={(e) => setFormData({ ...formData, recipient: e.target.value })}
+              <FormLabel>Rule Content</FormLabel>
+              <Textarea
+                placeholder="Enter rule content/signature"
+                value={formData.rule_content}
+                onChange={(e) => setFormData({ ...formData, rule_content: e.target.value })}
+                rows={4}
               />
             </FormControl>
 
-            <FormControl display="flex" alignItems="center">
-              <FormLabel mb="0">Enable Notification</FormLabel>
-              <Switch
-                isChecked={formData.enabled}
-                onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-                colorScheme="green"
+            <FormControl mb={4}>
+              <FormLabel>Description</FormLabel>
+              <Textarea
+                placeholder="Enter rule description (optional)"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
               />
+            </FormControl>
+
+            <FormControl>
+              <FormLabel>Status</FormLabel>
+              <Select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </Select>
             </FormControl>
           </ModalBody>
 
@@ -540,9 +576,9 @@ export default function NotificationSettings() {
               colorScheme="brand"
               onClick={handleSubmitEdit}
               isLoading={isSubmitting}
-              isDisabled={!formData.notification_name || !formData.recipient}
+              isDisabled={!formData.rule_name || !formData.category || !formData.severity || !formData.rule_content}
             >
-              Update
+              Update Rule
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -557,11 +593,11 @@ export default function NotificationSettings() {
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Delete Alert Notification
+              Delete IDS Rule
             </AlertDialogHeader>
 
             <AlertDialogBody>
-              Are you sure you want to delete "{selectedNotification?.notification_name}"? This action cannot be undone.
+              Are you sure you want to delete the rule "{selectedRule?.rule_name}"? This action cannot be undone.
             </AlertDialogBody>
 
             <AlertDialogFooter>

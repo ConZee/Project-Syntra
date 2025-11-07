@@ -112,23 +112,64 @@ export async function searchIDSRules(query) {
   return res.json();
 }
 
-// Alert Notifications Management (User Stories #28-#32)
-export async function fetchAlertNotifications() {
-  const res = await fetch(`${API}/api/alert-notifications`, {
+// System Health and Monitoring APIs
+export async function getSystemHealth() {
+  const res = await fetch(`${API}/api/health`, {
     headers: { ...getAuthHeader() }
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
-export async function createAlertNotification(notificationData) {
-  const res = await fetch(`${API}/api/alert-notifications`, {
+export async function getIDSHealth() {
+  const res = await fetch(`${API}/api/health/ids`, {
+    headers: { ...getAuthHeader() }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getSystemAlerts() {
+  const res = await fetch(`${API}/api/system/alerts`, {
+    headers: { ...getAuthHeader() }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getRecentUsers(days = 1) {
+  const res = await fetch(`${API}/api/users/recent?days=${days}`, {
+    headers: { ...getAuthHeader() }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Notification Management APIs
+export async function getNotifications() {
+  const res = await fetch(`${API}/api/notifications`, {
+    headers: { ...getAuthHeader() }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function getNotification(id) {
+  const res = await fetch(`${API}/api/notifications/${id}`, {
+    headers: { ...getAuthHeader() }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function createNotification(notificationData) {
+  const res = await fetch(`${API}/api/notifications`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeader()
     },
-    body: JSON.stringify(notificationData),
+    body: JSON.stringify(notificationData)
   });
   if (!res.ok) {
     const error = await res.json();
@@ -137,14 +178,14 @@ export async function createAlertNotification(notificationData) {
   return res.json();
 }
 
-export async function updateAlertNotification(id, notificationData) {
-  const res = await fetch(`${API}/api/alert-notifications/${id}`, {
+export async function updateNotification(id, notificationData) {
+  const res = await fetch(`${API}/api/notifications/${id}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeader()
     },
-    body: JSON.stringify(notificationData),
+    body: JSON.stringify(notificationData)
   });
   if (!res.ok) {
     const error = await res.json();
@@ -153,10 +194,10 @@ export async function updateAlertNotification(id, notificationData) {
   return res.json();
 }
 
-export async function deleteAlertNotification(id) {
-  const res = await fetch(`${API}/api/alert-notifications/${id}`, {
+export async function deleteNotification(id) {
+  const res = await fetch(`${API}/api/notifications/${id}`, {
     method: 'DELETE',
-    headers: { ...getAuthHeader() },
+    headers: { ...getAuthHeader() }
   });
   if (!res.ok) {
     const error = await res.json();
@@ -165,10 +206,26 @@ export async function deleteAlertNotification(id) {
   return res.json();
 }
 
-export async function searchAlertNotifications(query) {
-  const res = await fetch(`${API}/api/alert-notifications/search?q=${encodeURIComponent(query)}`, {
-    headers: { ...getAuthHeader() },
+export async function toggleNotificationStatus(id) {
+  const res = await fetch(`${API}/api/notifications/${id}/toggle`, {
+    method: 'PATCH',
+    headers: { ...getAuthHeader() }
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function testNotification(id) {
+  const res = await fetch(`${API}/api/notifications/${id}/test`, {
+    method: 'POST',
+    headers: { ...getAuthHeader() }
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || `HTTP ${res.status}`);
+  }
   return res.json();
 }
