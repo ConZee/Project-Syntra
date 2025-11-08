@@ -16,10 +16,14 @@ import UserAccounts from "./pages/platformAdmin/UserAccounts";
 import ProfileTypes from "./pages/platformAdmin/ProfileTypes";
 import Alerts from "./pages/platformAdmin/Alerts";
 
-// ⭐ Network Admin layout + routes
+// Network Admin layout + routes
 // CHANGE: fix folder name and use relative imports
 import NetworkAdminLayout from "./pages/networkAdmin/NetworkAdminLayout";
 import networkAdminRoutes from "./routes/networkAdminRoutes";
+
+// Security Analyst layout + routes
+import SecurityAnalystLayout from "./pages/securityAnalyst/SecurityAnalystLayout";
+import securityAnalystRoutes from "./routes/securityAnalystRoutes";
 
 // ---------- Small helper: compute home based on logged-in user ----------
 function DefaultRedirect() {
@@ -29,7 +33,7 @@ function DefaultRedirect() {
   const role = user?.role;
   if (role === "Platform Administrator") return <Navigate to="/platform-admin/dashboard" replace />;
   if (role === "Network Administrator")  return <Navigate to="/network-admin/dashboard" replace />;
-  if (role === "Security Analyst")       return <Navigate to="/platform-admin/alerts" replace />;
+  if (role === "Security Analyst")       return <Navigate to="/security-analyst/dashboard" replace />;
   return <Navigate to="/admin/default" replace />;
 }
 
@@ -68,12 +72,8 @@ export default function Main() {
               <Route path="dashboard" element={<DashboardHome />} />
               <Route path="users" element={<UserAccounts />} />
               <Route path="profile-types" element={<ProfileTypes />} />
+              <Route path="alerts" element={<Alerts />} />
             </Route>
-          </Route>
-
-          {/* Alerts shared by Platform Admin + Security Analyst */}
-          <Route element={<ProtectedRoute roles={["Platform Administrator", "Security Analyst"]} />}>
-            <Route path="platform-admin/alerts" element={<Alerts />} />
           </Route>
 
           {/* ---------- ⭐ Network Admin area (role-gated) ---------- */}
@@ -82,6 +82,19 @@ export default function Main() {
               {/* Map all Network Admin routes */}
               {networkAdminRoutes.map((route, key) => {
                 // FIX: nested route paths must be relative (no leading slash)
+                const childPath = route.path.replace(/^\//, "");
+                return <Route key={key} path={childPath} element={route.component} />;
+              })}
+              {/* Default redirect to dashboard */}
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
+          </Route>
+
+          {/* ---------- ⭐ Security Analyst area (role-gated) ---------- */}
+          <Route element={<ProtectedRoute roles={["Security Analyst"]} />}>
+            <Route path="security-analyst" element={<SecurityAnalystLayout />}>
+              {/* Map all Security Analyst routes */}
+              {securityAnalystRoutes.map((route, key) => {
                 const childPath = route.path.replace(/^\//, "");
                 return <Route key={key} path={childPath} element={route.component} />;
               })}
