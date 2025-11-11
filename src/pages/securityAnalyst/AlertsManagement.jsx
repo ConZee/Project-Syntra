@@ -1,5 +1,5 @@
 // src/pages/securityAnalyst/AlertsManagement.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Badge, Box, Button, Flex, HStack, IconButton, Input,
   Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter,
@@ -7,13 +7,120 @@ import {
   Textarea, Th, Thead, Tr, useColorModeValue, useToast, VStack,
   Icon, InputGroup, InputLeftElement, Tag, TagLabel, TagCloseButton,
   FormControl, FormLabel, Collapse, Tabs, TabList, Tab, TabPanels, TabPanel,
+  Alert, AlertIcon, AlertDescription,
 } from "@chakra-ui/react";
 import {
   FiRefreshCw, FiSearch, FiEdit, FiArchive, FiEye,
   FiFilter, FiX,
 } from "react-icons/fi";
-import { getSuricataAlerts, getZeekLogs } from "../../backend_api";
+import {
+  getSuricataAlerts,
+  getZeekLogs,
+  saveAlertMetadata as saveAlertMetadataAPI,
+  saveAlertMetadataBulk as saveAlertMetadataBulkAPI,
+  getAlertMetadata as getAlertMetadataAPI,
+  getAllAlertMetadata as getAllAlertMetadataAPI
+} from "../../backend_api";
 import { useAuth } from "../../auth/AuthContext";
+
+// Alert Metadata Persistence Helper
+// Stores analyst annotations (classification, status, tags, etc.) in SQLite backend
+// This replaced localStorage to enable multi-user collaboration
+
+// Simple hash function to create unique identifiers
+const simpleHash = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(36);
+};
+
+// Generate stable ID from alert properties (not index-based)
+const generateStableAlertId = (alert, source) => {
+  // Use _id if available from backend
+  if (alert._id) return alert._id;
+
+  // Otherwise create stable ID from alert properties that don't change
+  if (source === "Suricata") {
+    // Use timestamp + signature + src_ip + dest_ip for Suricata
+    const signature = alert.alert?.signature || alert.signature || "unknown";
+    const srcIp = alert.src_ip || "unknown";
+    const destIp = alert.dest_ip || "unknown";
+    const srcPort = alert.src_port || "0";
+    const destPort = alert.dest_port || "0";
+    const timestamp = alert.timestamp || Date.now();
+
+    // Create comprehensive string for hashing
+    const str = `${timestamp}-${srcIp}-${srcPort}-${destIp}-${destPort}-${signature}`;
+    const hash = simpleHash(str);
+    return `suricata-${hash}-${timestamp}`.substring(0, 100);
+  } else {
+    // Use uid or create from multiple fields for Zeek
+    if (alert.uid) return `zeek-${alert.uid}`;
+
+    const origH = alert["id.orig_h"] || "unknown";
+    const respH = alert["id.resp_h"] || "unknown";
+    const origP = alert["id.orig_p"] || "0";
+    const respP = alert["id.resp_p"] || "0";
+    const service = alert.service || "";
+    const proto = alert.proto || "";
+    const timestamp = alert.ts || alert.timestamp || Date.now();
+
+    // Create comprehensive string for hashing
+    const str = `${timestamp}-${origH}-${origP}-${respH}-${respP}-${service}-${proto}`;
+    const hash = simpleHash(str);
+    return `zeek-${hash}-${timestamp}`.substring(0, 100);
+  }
+};
+
+// API-based metadata functions (replaced localStorage for multi-user support)
+const getAlertMetadata = async (alertId) => {
+  try {
+    const metadata = await getAlertMetadataAPI(alertId);
+    return metadata;
+  } catch (error) {
+    console.error("Error reading alert metadata:", error);
+    return null;
+  }
+};
+
+const saveAlertMetadata = async (alertId, metadata) => {
+  try {
+    await saveAlertMetadataAPI(alertId, metadata);
+    console.log(`✅ Saved metadata for alert ID: ${alertId}`);
+  } catch (error) {
+    console.error("Error saving alert metadata:", error);
+    throw error; // Propagate error so caller can handle it
+  }
+};
+
+const saveAlertMetadataBulk = async (alertIds, metadata) => {
+  try {
+    await saveAlertMetadataBulkAPI(alertIds, metadata);
+    console.log(`✅ Saved metadata for ${alertIds.length} alerts`);
+  } catch (error) {
+    console.error("Error saving bulk alert metadata:", error);
+    throw error;
+  }
+};
+
+const getAllAlertMetadata = async () => {
+  try {
+    const metadataArray = await getAllAlertMetadataAPI();
+    // Convert array to object keyed by alert_id for compatibility
+    const metadataObj = {};
+    metadataArray.forEach(item => {
+      metadataObj[item.alert_id] = item;
+    });
+    return metadataObj;
+  } catch (error) {
+    console.error("Error reading all alert metadata:", error);
+    return {};
+  }
+};
 
 // Alert severity badge helper
 const getSeverityBadge = (severity) => {
@@ -37,6 +144,7 @@ export default function AlertsManagement() {
   const [suricataAlerts, setSuricataAlerts] = useState([]);
   const [zeekLogs, setZeekLogs] = useState([]);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [fetchLimit, setFetchLimit] = useState(50); // Performance: Default to 50 records per source
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
@@ -45,6 +153,7 @@ export default function AlertsManagement() {
   const [alertNameFilter, setAlertNameFilter] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [consolidateAlerts, setConsolidateAlerts] = useState(true); // Default to consolidated view
 
   // Modal State
   const [viewModal, setViewModal] = useState({ isOpen: false, alert: null });
@@ -63,48 +172,101 @@ export default function AlertsManagement() {
     reason: "",
   });
 
+  // Add this helper function to properly reset update modal
+  const resetUpdateModal = () => {
+    setUpdateModal({
+      isOpen: false,
+      alert: null,
+      classification: "",
+      status: "",
+      tags: [],
+      triageLevel: "",
+      notes: "",
+    });
+  };
+
   const cardBg = useColorModeValue("white", "navy.800");
   const border = useColorModeValue("gray.200", "whiteAlpha.200");
   const headerBg = useColorModeValue("gray.50", "navy.900");
 
-  const fetchAlerts = async () => {
+  const fetchAlerts = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
       setLoading(true);
       const [suricata, zeek] = await Promise.all([
-        getSuricataAlerts(200).catch(() => []),
-        getZeekLogs(200).catch(() => []),
+        getSuricataAlerts(fetchLimit).catch(() => []),
+        getZeekLogs(fetchLimit).catch(() => []),
       ]);
 
-      // Enrich Suricata alerts with local state
-      const enrichedSuricata = (suricata || []).map((alert, idx) => ({
-        ...alert,
-        id: alert._id || `suricata-${idx}`,
-        source: "Suricata",
-        signature: alert.alert?.signature || alert.signature || "Unknown",
-        severity: alert.alert?.severity || alert.severity || 3,
-        classification: alert.classification || "Unclassified",
-        status: alert.status || "New",
-        tags: alert.tags || [],
-        triageLevel: alert.triageLevel || "Medium",
-        notes: alert.notes || "",
-        archived: alert.archived || false,
-      }));
+      // Get all saved metadata from backend
+      const allMetadata = await getAllAlertMetadata();
 
-      // Enrich Zeek logs with local state
-      const enrichedZeek = (zeek || []).map((log, idx) => ({
-        ...log,
-        id: log._id || `zeek-${idx}`,
-        source: "Zeek",
-        signature: log.service || log.proto || "Network Activity",
-        severity: 3, // Default to low severity for logs
-        classification: log.classification || "Network Log",
-        status: log.status || "New",
-        tags: log.tags || [],
-        triageLevel: log.triageLevel || "Low",
-        notes: log.notes || "",
-        archived: log.archived || false,
-      }));
+      // Track IDs to ensure uniqueness within this batch
+      const usedIds = new Set();
+      const getUniqueId = (baseId) => {
+        let uniqueId = baseId;
+        let counter = 1;
+        while (usedIds.has(uniqueId)) {
+          uniqueId = `${baseId}-dup${counter}`;
+          counter++;
+        }
+        usedIds.add(uniqueId);
+        return uniqueId;
+      };
+
+      // Enrich Suricata alerts with local state AND persisted metadata
+      const enrichedSuricata = (suricata || []).map((alert) => {
+        const baseId = generateStableAlertId(alert, "Suricata");
+        const id = getUniqueId(baseId);
+        const savedMetadata = allMetadata[id] || allMetadata[baseId]; // Check both versioned and base ID
+
+        if (savedMetadata) {
+          console.log(`📋 Loading saved metadata for Suricata alert: ${id.substring(0, 50)}...`);
+        }
+
+        return {
+          ...alert,
+          id,
+          source: "Suricata",
+          signature: alert.alert?.signature || alert.signature || "Unknown",
+          // Use saved severity if analyst has triaged, otherwise use raw IDS severity
+          severity: savedMetadata?.severity || alert.alert?.severity || alert.severity || 3,
+          // Use saved metadata if available, otherwise use defaults
+          classification: savedMetadata?.classification || alert.classification || "Unclassified",
+          status: savedMetadata?.status || alert.status || "New",
+          tags: savedMetadata?.tags || alert.tags || [],
+          triageLevel: savedMetadata?.triageLevel || alert.triageLevel || "Medium",
+          notes: savedMetadata?.notes || alert.notes || "",
+          archived: savedMetadata?.archived || alert.archived || false,
+        };
+      });
+
+      // Enrich Zeek logs with local state AND persisted metadata
+      const enrichedZeek = (zeek || []).map((log) => {
+        const baseId = generateStableAlertId(log, "Zeek");
+        const id = getUniqueId(baseId);
+        const savedMetadata = allMetadata[id] || allMetadata[baseId]; // Check both versioned and base ID
+
+        if (savedMetadata) {
+          console.log(`📋 Loading saved metadata for Zeek log: ${id.substring(0, 50)}...`);
+        }
+
+        return {
+          ...log,
+          id,
+          source: "Zeek",
+          signature: log.service || log.proto || "Network Activity",
+          // Use saved severity if analyst has triaged, otherwise default to low for logs
+          severity: savedMetadata?.severity || 3,
+          // Use saved metadata if available, otherwise use defaults
+          classification: savedMetadata?.classification || log.classification || "Network Log",
+          status: savedMetadata?.status || log.status || "New",
+          tags: savedMetadata?.tags || log.tags || [],
+          triageLevel: savedMetadata?.triageLevel || log.triageLevel || "Low",
+          notes: savedMetadata?.notes || log.notes || "",
+          archived: savedMetadata?.archived || log.archived || false,
+        };
+      });
 
       setSuricataAlerts(enrichedSuricata);
       setZeekLogs(enrichedZeek);
@@ -119,25 +281,28 @@ export default function AlertsManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, fetchLimit, toast]);
 
   useEffect(() => {
     fetchAlerts();
-    const interval = setInterval(fetchAlerts, 30000);
+    const interval = setInterval(fetchAlerts, 60000); // Performance: Increased from 30s to 60s
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, [fetchAlerts]);
 
-  // Combine all alerts
-  const allAlerts = [...suricataAlerts, ...zeekLogs]
-    .filter(a => !a.archived)
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  // Combine all alerts - memoized for performance
+  const allAlerts = useMemo(() =>
+    [...suricataAlerts, ...zeekLogs]
+      .filter(a => !a.archived)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  , [suricataAlerts, zeekLogs]);
 
-  // Get unique alert signatures for filter dropdown
-  const uniqueSignatures = [...new Set(allAlerts.map(a => a.signature))].sort();
+  // Get unique alert signatures for filter dropdown - memoized
+  const uniqueSignatures = useMemo(() =>
+    [...new Set(allAlerts.map(a => a.signature))].sort()
+  , [allAlerts]);
 
-  // Apply filters
-  const filterAlerts = (alerts) => {
+  // Apply filters - memoized for performance
+  const filterAlerts = useCallback((alerts) => {
     let result = alerts.filter(a => !a.archived);
 
     // Search filter
@@ -176,11 +341,84 @@ export default function AlertsManagement() {
     }
 
     return result;
-  };
+  }, [searchTerm, alertNameFilter, severityFilter, statusFilter]);
 
-  const filteredAllAlerts = filterAlerts(allAlerts);
-  const filteredSuricataAlerts = filterAlerts(suricataAlerts.filter(a => !a.archived));
-  const filteredZeekLogs = filterAlerts(zeekLogs.filter(a => !a.archived));
+  // Consolidate alerts - group similar alerts within 5-minute window
+  const consolidateAlertsList = useCallback((alerts) => {
+    if (!consolidateAlerts) return alerts;
+
+    const TIME_WINDOW = 5 * 60 * 1000; // 5 minutes in milliseconds
+    const groups = new Map();
+
+    alerts.forEach(alert => {
+      const srcIp = alert.src_ip || alert["id.orig_h"] || "unknown";
+      const destIp = alert.dest_ip || alert["id.resp_h"] || "unknown";
+      const signature = alert.signature || "Unknown";
+
+      // Create group key
+      const groupKey = `${signature}|${srcIp}|${destIp}`;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, []);
+      }
+      groups.get(groupKey).push(alert);
+    });
+
+    // Consolidate each group
+    const consolidated = [];
+    groups.forEach((groupAlerts) => {
+      // Sort by timestamp
+      groupAlerts.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      // Check if alerts are within time window
+      const subgroups = [];
+      let currentSubgroup = [groupAlerts[0]];
+
+      for (let i = 1; i < groupAlerts.length; i++) {
+        const prevTime = new Date(groupAlerts[i - 1].timestamp).getTime();
+        const currTime = new Date(groupAlerts[i].timestamp).getTime();
+
+        if (currTime - prevTime <= TIME_WINDOW) {
+          currentSubgroup.push(groupAlerts[i]);
+        } else {
+          subgroups.push(currentSubgroup);
+          currentSubgroup = [groupAlerts[i]];
+        }
+      }
+      subgroups.push(currentSubgroup);
+
+      // Create consolidated alert for each subgroup
+      subgroups.forEach(subgroup => {
+        const firstAlert = subgroup[0];
+        const lastAlert = subgroup[subgroup.length - 1];
+
+        consolidated.push({
+          ...lastAlert, // Use latest alert as base
+          id: firstAlert.id, // Use first alert's ID for metadata
+          count: subgroup.length,
+          firstSeen: firstAlert.timestamp,
+          lastSeen: lastAlert.timestamp,
+          consolidatedIds: subgroup.map(a => a.id), // Track all IDs in group
+        });
+      });
+    });
+
+    // Sort by last seen (most recent first)
+    return consolidated.sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen));
+  }, [consolidateAlerts]);
+
+  const filteredAllAlerts = useMemo(() =>
+    consolidateAlertsList(filterAlerts(allAlerts)),
+    [consolidateAlertsList, filterAlerts, allAlerts]
+  );
+  const filteredSuricataAlerts = useMemo(() =>
+    consolidateAlertsList(filterAlerts(suricataAlerts.filter(a => !a.archived))),
+    [consolidateAlertsList, filterAlerts, suricataAlerts]
+  );
+  const filteredZeekLogs = useMemo(() =>
+    consolidateAlertsList(filterAlerts(zeekLogs.filter(a => !a.archived))),
+    [consolidateAlertsList, filterAlerts, zeekLogs]
+  );
 
   // View Alert Details
   const handleViewAlert = (alert) => {
@@ -200,8 +438,42 @@ export default function AlertsManagement() {
     });
   };
 
-  // Update Alert
-  const handleUpdateAlert = () => {
+  // Update Alert - now persists to SQLite backend
+  const handleUpdateAlert = async () => {
+    // Map triage level to severity
+    const updatedSeverity = triageLevelToSeverity(updateModal.triageLevel);
+
+    const metadata = {
+      classification: updateModal.classification,
+      status: updateModal.status,
+      tags: updateModal.tags,
+      triageLevel: updateModal.triageLevel,
+      notes: updateModal.notes,
+      severity: updatedSeverity, // Save severity based on triage level
+      archived: false,
+    };
+
+    try {
+      // If this is a consolidated alert, save metadata for ALL alerts in the group
+      if (updateModal.alert.consolidatedIds && updateModal.alert.consolidatedIds.length > 0) {
+        await saveAlertMetadataBulk(updateModal.alert.consolidatedIds, metadata);
+        console.log(`✅ Saved metadata for ${updateModal.alert.consolidatedIds.length} consolidated alerts`);
+      } else {
+        // Single alert - save metadata normally
+        await saveAlertMetadata(updateModal.alert.id, metadata);
+      }
+    } catch (error) {
+      toast({
+        title: "Error saving metadata",
+        description: error.message || "Failed to save alert metadata",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return; // Don't proceed with UI updates if save failed
+    }
+
+    // Also update React state for immediate UI feedback
     const updateAlertInList = (alerts) =>
       alerts.map((a) =>
         a.id === updateModal.alert.id
@@ -212,6 +484,7 @@ export default function AlertsManagement() {
               tags: updateModal.tags,
               triageLevel: updateModal.triageLevel,
               notes: updateModal.notes,
+              severity: updatedSeverity, // Update severity in UI
             }
           : a
       );
@@ -223,15 +496,18 @@ export default function AlertsManagement() {
     }
 
     toast({
-      title: "Alert updated successfully",
+      title: "Alert updated and saved successfully",
+      description: updateModal.alert.count > 1
+        ? `Updated ${updateModal.alert.count} consolidated alerts. Changes will persist.`
+        : "Changes will persist across page refreshes",
       status: "success",
-      duration: 2000,
+      duration: 3000,
     });
-    setUpdateModal({ isOpen: false, alert: null });
+    resetUpdateModal();
   };
 
-  // Archive Alert
-  const handleArchiveAlert = () => {
+  // Archive Alert - now persists to SQLite backend
+  const handleArchiveAlert = async () => {
     if (!archiveModal.reason.trim()) {
       toast({
         title: "Please provide a reason for archiving",
@@ -241,6 +517,33 @@ export default function AlertsManagement() {
       return;
     }
 
+    try {
+      // If this is a consolidated alert, archive ALL alerts in the group
+      if (archiveModal.alert.consolidatedIds && archiveModal.alert.consolidatedIds.length > 0) {
+        await saveAlertMetadataBulk(archiveModal.alert.consolidatedIds, {
+          archived: true,
+          archive_reason: archiveModal.reason,
+        });
+        console.log(`✅ Archived ${archiveModal.alert.consolidatedIds.length} consolidated alerts`);
+      } else {
+        // Single alert
+        await saveAlertMetadata(archiveModal.alert.id, {
+          archived: true,
+          archive_reason: archiveModal.reason,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error archiving alert",
+        description: error.message || "Failed to archive alert",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return; // Don't proceed with UI updates if save failed
+    }
+
+    // Also update React state for immediate UI feedback
     const archiveInList = (alerts) =>
       alerts.map((a) =>
         a.id === archiveModal.alert.id
@@ -255,9 +558,12 @@ export default function AlertsManagement() {
     }
 
     toast({
-      title: "Alert archived successfully",
+      title: "Alert archived and saved successfully",
+      description: archiveModal.alert.count > 1
+        ? `Archived ${archiveModal.alert.count} consolidated alerts.`
+        : "Archive status will persist across page refreshes",
       status: "success",
-      duration: 2000,
+      duration: 3000,
     });
     setArchiveModal({ isOpen: false, alert: null, reason: "" });
   };
@@ -288,6 +594,17 @@ export default function AlertsManagement() {
     return "INFO";
   };
 
+  // Map triage level to severity value for display
+  const triageLevelToSeverity = (triageLevel) => {
+    const mapping = {
+      "Critical": 1,
+      "High": 1,
+      "Medium": 2,
+      "Low": 3,
+    };
+    return mapping[triageLevel] || 3;
+  };
+
   // Render alerts table
   const renderAlertsTable = (alerts, showSource = false) => (
     <Table variant="simple">
@@ -296,6 +613,7 @@ export default function AlertsManagement() {
           <Th>Timestamp</Th>
           {showSource && <Th>Source</Th>}
           <Th>Alert Name</Th>
+          <Th>Hits</Th>
           <Th>Source IP</Th>
           <Th>Dest IP</Th>
           <Th>Severity</Th>
@@ -309,7 +627,14 @@ export default function AlertsManagement() {
           alerts.map((alert) => (
             <Tr key={alert.id}>
               <Td fontSize="sm" whiteSpace="nowrap">
-                {new Date(alert.timestamp).toLocaleString()}
+                {alert.count > 1 ? (
+                  <VStack align="start" spacing={0}>
+                    <Text fontSize="xs" opacity={0.7}>First: {new Date(alert.firstSeen).toLocaleString()}</Text>
+                    <Text fontSize="xs" opacity={0.7}>Last: {new Date(alert.lastSeen).toLocaleString()}</Text>
+                  </VStack>
+                ) : (
+                  new Date(alert.timestamp).toLocaleString()
+                )}
               </Td>
               {showSource && (
                 <Td>
@@ -323,6 +648,15 @@ export default function AlertsManagement() {
               )}
               <Td fontSize="sm" maxW="250px" isTruncated fontWeight="medium">
                 {alert.signature}
+              </Td>
+              <Td>
+                <Badge
+                  colorScheme={alert.count > 1 ? "purple" : "gray"}
+                  fontSize="sm"
+                  fontWeight="bold"
+                >
+                  {alert.count || 1}
+                </Badge>
               </Td>
               <Td fontSize="sm">
                 {alert.src_ip || alert["id.orig_h"] || "N/A"}
@@ -383,7 +717,7 @@ export default function AlertsManagement() {
           ))
         ) : (
           <Tr>
-            <Td colSpan={showSource ? 9 : 8} textAlign="center" py={8} color="gray.500">
+            <Td colSpan={showSource ? 10 : 9} textAlign="center" py={8} color="gray.500">
               No alerts found
             </Td>
           </Tr>
@@ -395,12 +729,33 @@ export default function AlertsManagement() {
   return (
     <Box>
       {/* Header */}
-      <Flex gap={3} align="center" mb={6}>
+      <Flex gap={3} align="center" mb={4}>
         <Text fontSize="2xl" fontWeight="bold">
           Alerts Management
         </Text>
         <HStack ms="auto" spacing={2}>
-          <Text fontSize="xs" color="gray.500">
+          <Button
+            size="sm"
+            onClick={() => setConsolidateAlerts(!consolidateAlerts)}
+            colorScheme={consolidateAlerts ? "brand" : "gray"}
+            variant={consolidateAlerts ? "solid" : "outline"}
+          >
+            {consolidateAlerts ? "Consolidated" : "Raw Logs"}
+          </Button>
+          <FormControl width="auto" minW="120px">
+            <Select
+              size="sm"
+              value={fetchLimit}
+              onChange={(e) => setFetchLimit(Number(e.target.value))}
+              bg={cardBg}
+            >
+              <option value={20}>Load 20</option>
+              <option value={50}>Load 50</option>
+              <option value={100}>Load 100</option>
+              <option value={200}>Load 200</option>
+            </Select>
+          </FormControl>
+          <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">
             Last updated: {lastRefresh.toLocaleTimeString()}
           </Text>
           <IconButton
@@ -419,6 +774,25 @@ export default function AlertsManagement() {
           />
         </HStack>
       </Flex>
+
+      {/* Consolidated Alerts Info */}
+      <Alert status="info" borderRadius="md" mb={4} fontSize="sm">
+        <AlertIcon />
+        <Box>
+          <AlertDescription>
+            <strong>Style Alert Consolidation:</strong> {consolidateAlerts ? (
+              <>Similar alerts (same signature, IPs) within 5 minutes are grouped together.
+              The count badge shows how many events occurred. Toggle to "Raw Logs" to see individual packets.</>
+            ) : (
+              <>Viewing raw IDS/Network logs - each packet is shown separately.
+              Toggle to "Consolidated" to group similar alerts together (recommended for most analysis).</>
+            )}
+          </AlertDescription>
+          <Text fontSize="xs" mt={2} opacity={0.8}>
+            <strong>Note:</strong> Your classifications, status, and severity updates persist across page refreshes.
+          </Text>
+        </Box>
+      </Alert>
 
       {/* Search Bar */}
       <Box mb={4}>
@@ -688,7 +1062,7 @@ export default function AlertsManagement() {
       {/* Update Alert Modal */}
       <Modal
         isOpen={updateModal.isOpen}
-        onClose={() => setUpdateModal({ isOpen: false, alert: null })}
+        onClose={resetUpdateModal}
         size="lg"
       >
         <ModalOverlay />
@@ -778,7 +1152,7 @@ export default function AlertsManagement() {
             <Button
               variant="ghost"
               mr={3}
-              onClick={() => setUpdateModal({ isOpen: false, alert: null })}
+              onClick={resetUpdateModal}
             >
               Cancel
             </Button>
