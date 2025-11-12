@@ -13,6 +13,8 @@ import { fileURLToPath } from 'url';
 // Added JSON Web Token and Elasticsearch client
 import jwt from 'jsonwebtoken';
 import { Client as ESClient } from '@elastic/elasticsearch';
+import speakeasy from 'speakeasy';
+import qrcode from 'qrcode';
 
 const SALT_ROUNDS = 10;
 
@@ -89,6 +91,27 @@ db.run(`
 db.serialize(() => {
   db.run(`UPDATE users SET role = 'Platform Administrator' WHERE role IN ('Platform Admin','platform admin')`);
   db.run(`UPDATE users SET role = 'Network Administrator'  WHERE role IN ('Network Admin','network admin')`);
+
+  // Add MFA columns if they don't exist
+  db.run(`ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding mfa_enabled column:', err.message);
+    }
+  });
+
+  db.run(`ALTER TABLE users ADD COLUMN mfa_secret TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding mfa_secret column:', err.message);
+    }
+  });
+
+  db.run(`ALTER TABLE users ADD COLUMN mfa_backup_codes TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding mfa_backup_codes column:', err.message);
+    } else {
+      console.log('✅ MFA columns ready');
+    }
+  });
 });
 
 // Profile types table
@@ -173,27 +196,6 @@ db.run(`
 `, (err) => {
   if (err) console.error('Error creating dashboard_layouts table:', err);
   else console.log('✅ Dashboard Layouts table ready');
-});
-
-// Alert Metadata table - For storing analyst annotations on IDS alerts
-db.run(`
-  CREATE TABLE IF NOT EXISTS alert_metadata (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    alert_id TEXT UNIQUE NOT NULL,
-    classification TEXT,
-    status TEXT,
-    severity INTEGER,
-    triage_level TEXT,
-    tags TEXT,
-    notes TEXT,
-    archived BOOLEAN DEFAULT 0,
-    archive_reason TEXT,
-    updated_by TEXT,
-    updated_at TEXT NOT NULL
-  )
-`, (err) => {
-  if (err) console.error('Error creating alert_metadata table:', err);
-  else console.log('✅ Alert Metadata table ready');
 });
 
 // JWT-based RBAC middleware
@@ -299,7 +301,7 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(400).json({ error: 'Email and password are required.' });
   }
 
-  const sql = `SELECT id, name, email, role, status, joined_at, last_active, password_hash
+  const sql = `SELECT id, name, email, role, status, joined_at, last_active, password_hash, mfa_enabled
                FROM users WHERE email = ? LIMIT 1`;
   db.get(sql, [String(email).toLowerCase().trim()], async (err, row) => {
     if (err) {
@@ -316,6 +318,17 @@ app.post('/api/auth/login', (req, res) => {
       const desiredRole = expectedRole ? normalizeRole(expectedRole) : null;
       if (desiredRole && desiredRole !== storedRole) {
         return res.status(403).json({ error: 'Role mismatch for this account.' });
+      }
+
+      // Check if MFA is enabled
+      if (row.mfa_enabled === 1) {
+        // Return MFA required response
+        return res.json({
+          mfaRequired: true,
+          userId: row.id,
+          email: row.email,
+          role: storedRole
+        });
       }
 
       // Sign a real JWT with the user's role
@@ -342,6 +355,300 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(500).json({ error: 'Authentication failed.' });
     }
   });
+});
+
+// =========================================================
+// MFA ROUTES
+// =========================================================
+
+// GET /api/auth/mfa/status/:userId - Get MFA status for a user
+app.get('/api/auth/mfa/status/:userId', authorize([]), (req, res) => {
+  const userId = Number(req.params.userId);
+
+  // Users can only check their own MFA status
+  if (req.user.id !== userId) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  db.get(
+    `SELECT mfa_enabled FROM users WHERE id = ?`,
+    [userId],
+    (err, row) => {
+      if (err) {
+        console.error('[GET /api/auth/mfa/status] DB error:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+      if (!row) return res.status(404).json({ error: 'User not found' });
+
+      return res.json({ mfa_enabled: row.mfa_enabled === 1 });
+    }
+  );
+});
+
+// POST /api/auth/mfa/setup - Generate QR code and secret for MFA setup
+app.post('/api/auth/mfa/setup', authorize([]), async (req, res) => {
+  const userId = req.user.id;
+  const userEmail = req.user.email;
+  const userName = req.user.name;
+
+  try {
+    // Generate a secret for the user
+    const secret = speakeasy.generateSecret({
+      name: `Syntra IDS (${userEmail})`,
+      issuer: 'Syntra IDS Dashboard',
+      length: 32
+    });
+
+    // Generate QR code as data URL
+    const qrCodeDataURL = await qrcode.toDataURL(secret.otpauth_url);
+
+    // Store the secret temporarily (not enabled yet)
+    db.run(
+      `UPDATE users SET mfa_secret = ? WHERE id = ?`,
+      [secret.base32, userId],
+      function (err) {
+        if (err) {
+          console.error('[POST /api/auth/mfa/setup] DB error:', err);
+          return res.status(500).json({ error: 'Failed to setup MFA' });
+        }
+
+        return res.json({
+          secret: secret.base32,
+          qrCode: qrCodeDataURL,
+          otpauth_url: secret.otpauth_url
+        });
+      }
+    );
+  } catch (err) {
+    console.error('[POST /api/auth/mfa/setup] Error:', err);
+    return res.status(500).json({ error: 'Failed to generate MFA secret' });
+  }
+});
+
+// POST /api/auth/mfa/verify-setup - Verify TOTP code and enable MFA
+app.post('/api/auth/mfa/verify-setup', authorize([]), (req, res) => {
+  const userId = req.user.id;
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ error: 'Token is required' });
+  }
+
+  // Get the user's secret
+  db.get(
+    `SELECT mfa_secret FROM users WHERE id = ?`,
+    [userId],
+    (err, row) => {
+      if (err) {
+        console.error('[POST /api/auth/mfa/verify-setup] DB error:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+      if (!row || !row.mfa_secret) {
+        return res.status(400).json({ error: 'MFA setup not initiated' });
+      }
+
+      // Verify the token
+      const verified = speakeasy.totp.verify({
+        secret: row.mfa_secret,
+        encoding: 'base32',
+        token: token,
+        window: 2 // Allow 2 time steps before/after for clock skew
+      });
+
+      if (!verified) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      // Generate backup codes
+      const backupCodes = [];
+      for (let i = 0; i < 8; i++) {
+        backupCodes.push(
+          Math.random().toString(36).substring(2, 10).toUpperCase()
+        );
+      }
+
+      // Enable MFA and store backup codes
+      db.run(
+        `UPDATE users SET mfa_enabled = 1, mfa_backup_codes = ? WHERE id = ?`,
+        [JSON.stringify(backupCodes), userId],
+        function (err) {
+          if (err) {
+            console.error('[POST /api/auth/mfa/verify-setup] DB error:', err);
+            return res.status(500).json({ error: 'Failed to enable MFA' });
+          }
+
+          return res.json({
+            success: true,
+            message: 'MFA enabled successfully',
+            backupCodes: backupCodes
+          });
+        }
+      );
+    }
+  );
+});
+
+// POST /api/auth/mfa/verify - Verify TOTP code during login
+app.post('/api/auth/mfa/verify', (req, res) => {
+  const { userId, token, isBackupCode } = req.body;
+
+  if (!userId || !token) {
+    return res.status(400).json({ error: 'User ID and token are required' });
+  }
+
+  db.get(
+    `SELECT id, name, email, role, status, mfa_secret, mfa_backup_codes FROM users WHERE id = ?`,
+    [userId],
+    (err, row) => {
+      if (err) {
+        console.error('[POST /api/auth/mfa/verify] DB error:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+      if (!row) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      let verified = false;
+
+      if (isBackupCode) {
+        // Verify backup code
+        try {
+          const backupCodes = JSON.parse(row.mfa_backup_codes || '[]');
+          const codeIndex = backupCodes.indexOf(token.toUpperCase());
+
+          if (codeIndex !== -1) {
+            verified = true;
+            // Remove used backup code
+            backupCodes.splice(codeIndex, 1);
+            db.run(
+              `UPDATE users SET mfa_backup_codes = ? WHERE id = ?`,
+              [JSON.stringify(backupCodes), userId],
+              (err) => {
+                if (err) console.error('Error updating backup codes:', err);
+              }
+            );
+          }
+        } catch (e) {
+          console.error('Error parsing backup codes:', e);
+        }
+      } else {
+        // Verify TOTP token
+        verified = speakeasy.totp.verify({
+          secret: row.mfa_secret,
+          encoding: 'base32',
+          token: token,
+          window: 2
+        });
+      }
+
+      if (!verified) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+
+      // Generate JWT token
+      const jwtToken = jwt.sign(
+        {
+          id: row.id,
+          role: normalizeRole(row.role),
+          name: row.name,
+          email: row.email
+        },
+        JWT_SECRET,
+        { expiresIn: '2h' }
+      );
+
+      return res.json({
+        token: jwtToken,
+        user: {
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          role: normalizeRole(row.role),
+          status: row.status
+        }
+      });
+    }
+  );
+});
+
+// POST /api/auth/mfa/disable - Disable MFA
+app.post('/api/auth/mfa/disable', authorize([]), (req, res) => {
+  const userId = req.user.id;
+  const { password } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ error: 'Password is required to disable MFA' });
+  }
+
+  // Verify password before disabling MFA
+  db.get(
+    `SELECT password_hash FROM users WHERE id = ?`,
+    [userId],
+    async (err, row) => {
+      if (err) {
+        console.error('[POST /api/auth/mfa/disable] DB error:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+      if (!row) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      try {
+        const passwordMatch = await bcrypt.compare(password, row.password_hash);
+
+        if (!passwordMatch) {
+          return res.status(401).json({ error: 'Invalid password' });
+        }
+
+        // Disable MFA and clear secret and backup codes
+        db.run(
+          `UPDATE users SET mfa_enabled = 0, mfa_secret = NULL, mfa_backup_codes = NULL WHERE id = ?`,
+          [userId],
+          function (err) {
+            if (err) {
+              console.error('[POST /api/auth/mfa/disable] DB error:', err);
+              return res.status(500).json({ error: 'Failed to disable MFA' });
+            }
+
+            return res.json({
+              success: true,
+              message: 'MFA disabled successfully'
+            });
+          }
+        );
+      } catch (e) {
+        console.error('[POST /api/auth/mfa/disable] bcrypt error:', e);
+        return res.status(500).json({ error: 'Authentication failed' });
+      }
+    }
+  );
+});
+
+// GET /api/auth/mfa/backup-codes - Get remaining backup codes
+app.get('/api/auth/mfa/backup-codes', authorize([]), (req, res) => {
+  const userId = req.user.id;
+
+  db.get(
+    `SELECT mfa_backup_codes FROM users WHERE id = ?`,
+    [userId],
+    (err, row) => {
+      if (err) {
+        console.error('[GET /api/auth/mfa/backup-codes] DB error:', err);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+      if (!row) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      try {
+        const backupCodes = JSON.parse(row.mfa_backup_codes || '[]');
+        return res.json({ backupCodes: backupCodes });
+      } catch (e) {
+        console.error('Error parsing backup codes:', e);
+        return res.json({ backupCodes: [] });
+      }
+    }
+  );
 });
 
 // PUT /api/users/:id - update name, email, role; optional password
@@ -1089,145 +1396,6 @@ app.delete('/api/ids-rules/:id', authorize(['Network Administrator']), (req, res
     }
 
     res.json({ success: true, message: 'Rule deleted successfully' });
-  });
-});
-
-// =========================================================
-// ALERT METADATA MANAGEMENT APIs
-// =========================================================
-
-// POST /api/alerts/metadata - Save or update metadata for alert(s)
-app.post('/api/alerts/metadata', authorize(['Security Analyst', 'Network Administrator', 'Platform Administrator']), (req, res) => {
-  const { alert_id, alert_ids, classification, status, severity, triage_level, tags, notes, archived, archive_reason } = req.body;
-
-  // Support both single alert and bulk updates (for consolidated alerts)
-  const alertIds = alert_ids || (alert_id ? [alert_id] : []);
-
-  if (!alertIds || alertIds.length === 0) {
-    return res.status(400).json({ error: 'alert_id or alert_ids required' });
-  }
-
-  const updated_by = req.user?.email || req.user?.name || 'unknown';
-  const updated_at = new Date().toISOString();
-
-  // Prepare tags as JSON string
-  const tagsJson = tags ? JSON.stringify(tags) : null;
-
-  const sql = `
-    INSERT INTO alert_metadata (
-      alert_id, classification, status, severity, triage_level,
-      tags, notes, archived, archive_reason, updated_by, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(alert_id) DO UPDATE SET
-      classification = excluded.classification,
-      status = excluded.status,
-      severity = excluded.severity,
-      triage_level = excluded.triage_level,
-      tags = excluded.tags,
-      notes = excluded.notes,
-      archived = excluded.archived,
-      archive_reason = excluded.archive_reason,
-      updated_by = excluded.updated_by,
-      updated_at = excluded.updated_at
-  `;
-
-  let completed = 0;
-  let errors = [];
-
-  alertIds.forEach((alertId, index) => {
-    db.run(sql, [
-      alertId,
-      classification || null,
-      status || null,
-      severity || null,
-      triage_level || null,
-      tagsJson,
-      notes || null,
-      archived ? 1 : 0,
-      archive_reason || null,
-      updated_by,
-      updated_at
-    ], function(err) {
-      completed++;
-
-      if (err) {
-        console.error('[POST /api/alerts/metadata] Error for alert', alertId, ':', err);
-        errors.push({ alert_id: alertId, error: err.message });
-      }
-
-      // Send response after all inserts complete
-      if (completed === alertIds.length) {
-        if (errors.length > 0) {
-          return res.status(500).json({
-            success: false,
-            saved: alertIds.length - errors.length,
-            errors
-          });
-        }
-
-        res.status(200).json({
-          success: true,
-          count: alertIds.length,
-          updated_by,
-          updated_at
-        });
-      }
-    });
-  });
-});
-
-// GET /api/alerts/metadata/:alertId - Get metadata for specific alert
-app.get('/api/alerts/metadata/:alertId', authorize(['Security Analyst', 'Network Administrator', 'Platform Administrator']), (req, res) => {
-  const { alertId } = req.params;
-
-  const sql = `SELECT * FROM alert_metadata WHERE alert_id = ?`;
-
-  db.get(sql, [alertId], (err, row) => {
-    if (err) {
-      console.error('[GET /api/alerts/metadata/:alertId] Error:', err);
-      return res.status(500).json({ error: 'Failed to fetch metadata' });
-    }
-
-    if (!row) {
-      return res.status(404).json({ error: 'Metadata not found' });
-    }
-
-    // Parse tags back to array
-    if (row.tags) {
-      try {
-        row.tags = JSON.parse(row.tags);
-      } catch (e) {
-        row.tags = [];
-      }
-    }
-
-    res.json(row);
-  });
-});
-
-// GET /api/alerts/metadata - Get all metadata (bulk)
-app.get('/api/alerts/metadata', authorize(['Security Analyst', 'Network Administrator', 'Platform Administrator']), (req, res) => {
-  const sql = `SELECT * FROM alert_metadata ORDER BY updated_at DESC`;
-
-  db.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error('[GET /api/alerts/metadata] Error:', err);
-      return res.status(500).json({ error: 'Failed to fetch metadata' });
-    }
-
-    // Parse tags for each row
-    const parsed = rows.map(row => {
-      if (row.tags) {
-        try {
-          row.tags = JSON.parse(row.tags);
-        } catch (e) {
-          row.tags = [];
-        }
-      }
-      return row;
-    });
-
-    res.json(parsed);
   });
 });
 
