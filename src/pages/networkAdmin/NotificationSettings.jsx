@@ -80,7 +80,10 @@ export default function NotificationSettings() {
 
   // Color mode values
   const textColor = useColorModeValue('secondaryGray.900', 'white');
-  const textSecondary = useColorModeValue('secondaryGray.700', 'whiteAlpha.700');
+  const textSecondary = useColorModeValue(
+    'secondaryGray.700',
+    'whiteAlpha.700',
+  );
   const cardBg = useColorModeValue('white', 'navy.800');
   const borderColor = useColorModeValue('gray.200', 'whiteAlpha.100');
   const hoverBg = useColorModeValue('gray.50', 'whiteAlpha.50');
@@ -164,7 +167,10 @@ export default function NotificationSettings() {
       status: notification.status,
     });
     // Parse recipients into tags
-    const recipients = notification.recipients.split(',').map((r) => r.trim()).filter((r) => r);
+    const recipients = notification.recipients
+      .split(',')
+      .map((r) => r.trim())
+      .filter((r) => r);
     setRecipientList(recipients);
     onOpen();
   };
@@ -175,7 +181,11 @@ export default function NotificationSettings() {
       // Build recipients string from tags
       const recipientsString = recipientList.join(', ');
 
-      if (!formData.notification_name || !formData.trigger_condition || !recipientsString) {
+      if (
+        !formData.notification_name ||
+        !formData.trigger_condition ||
+        !recipientsString
+      ) {
         toast({
           title: 'Missing required fields',
           description: 'Please fill in all required fields',
@@ -325,7 +335,8 @@ export default function NotificationSettings() {
       notification.trigger_condition.toLowerCase().includes(query) ||
       notification.delivery_method.toLowerCase().includes(query) ||
       notification.recipients.toLowerCase().includes(query) ||
-      (notification.severity_filter && notification.severity_filter.toLowerCase().includes(query))
+      (notification.severity_filter &&
+        notification.severity_filter.toLowerCase().includes(query))
     );
   });
 
@@ -333,7 +344,13 @@ export default function NotificationSettings() {
     <Box pt={{ base: '130px', md: '80px', xl: '80px' }}>
       <Card direction="column" w="100%" px="25px" py="25px" bg={cardBg}>
         {/* Header */}
-        <Flex justify="space-between" align="center" mb="20px" flexWrap="wrap" gap={3}>
+        <Flex
+          justify="space-between"
+          align="center"
+          mb="20px"
+          flexWrap="wrap"
+          gap={3}
+        >
           <Box>
             <Text color={textColor} fontSize="22px" fontWeight="700" mb="4px">
               Alert Notification Settings
@@ -358,7 +375,7 @@ export default function NotificationSettings() {
               colorScheme="brand"
               size="sm"
             >
-              Create Rule
+              Create Alert
             </Button>
           </HStack>
         </Flex>
@@ -400,15 +417,25 @@ export default function NotificationSettings() {
               borderColor={borderColor}
               borderRadius="md"
             >
-              <Icon as={MdNotifications} w={12} h={12} color="gray.400" mb={3} />
+              <Icon
+                as={MdNotifications}
+                w={12}
+                h={12}
+                color="gray.400"
+                mb={3}
+              />
               <Text color={textSecondary} fontSize="lg" fontWeight="600" mb={2}>
                 No notification rules
               </Text>
               <Text color={textSecondary} fontSize="sm" mb={4}>
                 Create your first notification rule to get started
               </Text>
-              <Button leftIcon={<Icon as={MdAdd} />} onClick={handleCreate} colorScheme="brand">
-                Create Rule
+              <Button
+                leftIcon={<Icon as={MdAdd} />}
+                onClick={handleCreate}
+                colorScheme="brand"
+              >
+                Create Alert
               </Button>
             </Flex>
           ) : filteredNotifications.length === 0 ? (
@@ -426,7 +453,11 @@ export default function NotificationSettings() {
               <Text color={textSecondary} fontSize="sm" mb={4}>
                 Try adjusting your search query
               </Text>
-              <Button size="sm" variant="outline" onClick={() => setSearchQuery('')}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSearchQuery('')}
+              >
                 Clear Search
               </Button>
             </Flex>
@@ -452,20 +483,26 @@ export default function NotificationSettings() {
                     <Td fontSize="sm">{notification.trigger_condition}</Td>
                     <Td fontSize="sm">
                       {notification.severity_filter ? (
-                        <Badge colorScheme="orange">{notification.severity_filter}</Badge>
+                        <Badge colorScheme="orange">
+                          {notification.severity_filter}
+                        </Badge>
                       ) : (
                         <Text color={textSecondary}>All</Text>
                       )}
                     </Td>
                     <Td fontSize="sm">
-                      <Badge colorScheme="blue">{notification.delivery_method}</Badge>
+                      <Badge colorScheme="blue">
+                        {notification.delivery_method}
+                      </Badge>
                     </Td>
                     <Td fontSize="xs" maxW="200px" isTruncated>
                       {notification.recipients}
                     </Td>
                     <Td>
                       <Badge
-                        colorScheme={notification.status === 'Enabled' ? 'green' : 'gray'}
+                        colorScheme={
+                          notification.status === 'Enabled' ? 'green' : 'gray'
+                        }
                         fontSize="xs"
                       >
                         {notification.status}
@@ -473,7 +510,13 @@ export default function NotificationSettings() {
                     </Td>
                     <Td>
                       <HStack spacing={1}>
-                        <Tooltip label={notification.status === 'Enabled' ? 'Disable' : 'Enable'}>
+                        <Tooltip
+                          label={
+                            notification.status === 'Enabled'
+                              ? 'Disable'
+                              : 'Enable'
+                          }
+                        >
                           <IconButton
                             icon={
                               <Icon
@@ -486,7 +529,11 @@ export default function NotificationSettings() {
                             }
                             size="sm"
                             variant="ghost"
-                            colorScheme={notification.status === 'Enabled' ? 'green' : 'gray'}
+                            colorScheme={
+                              notification.status === 'Enabled'
+                                ? 'green'
+                                : 'gray'
+                            }
                             onClick={() => handleToggleStatus(notification.id)}
                           />
                         </Tooltip>
@@ -535,7 +582,9 @@ export default function NotificationSettings() {
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>
-            {editingNotification ? 'Edit Notification Rule' : 'Create Notification Rule'}
+            {editingNotification
+              ? 'Edit Notification Rule'
+              : 'Create Notification Rule'}
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
@@ -546,7 +595,10 @@ export default function NotificationSettings() {
                   placeholder="e.g., High Severity Alerts"
                   value={formData.notification_name}
                   onChange={(e) =>
-                    setFormData({ ...formData, notification_name: e.target.value })
+                    setFormData({
+                      ...formData,
+                      notification_name: e.target.value,
+                    })
                   }
                 />
               </FormControl>
@@ -556,7 +608,10 @@ export default function NotificationSettings() {
                 <Select
                   value={formData.trigger_condition}
                   onChange={(e) =>
-                    setFormData({ ...formData, trigger_condition: e.target.value })
+                    setFormData({
+                      ...formData,
+                      trigger_condition: e.target.value,
+                    })
                   }
                 >
                   <option value="Any Alert">Any Alert</option>
@@ -573,7 +628,10 @@ export default function NotificationSettings() {
                 <Select
                   value={formData.severity_filter}
                   onChange={(e) =>
-                    setFormData({ ...formData, severity_filter: e.target.value })
+                    setFormData({
+                      ...formData,
+                      severity_filter: e.target.value,
+                    })
                   }
                 >
                   <option value="">All Severities</option>
@@ -588,7 +646,10 @@ export default function NotificationSettings() {
                 <Select
                   value={formData.delivery_method}
                   onChange={(e) =>
-                    setFormData({ ...formData, delivery_method: e.target.value })
+                    setFormData({
+                      ...formData,
+                      delivery_method: e.target.value,
+                    })
                   }
                 >
                   <option value="Email">Email</option>
@@ -609,9 +670,16 @@ export default function NotificationSettings() {
                 />
                 <Flex flexWrap="wrap" gap={2} mt={2}>
                   {recipientList.map((recipient) => (
-                    <Tag key={recipient} size="md" colorScheme="blue" borderRadius="full">
+                    <Tag
+                      key={recipient}
+                      size="md"
+                      colorScheme="blue"
+                      borderRadius="full"
+                    >
                       <TagLabel>{recipient}</TagLabel>
-                      <TagCloseButton onClick={() => handleRemoveRecipient(recipient)} />
+                      <TagCloseButton
+                        onClick={() => handleRemoveRecipient(recipient)}
+                      />
                     </Tag>
                   ))}
                 </Flex>
@@ -626,7 +694,10 @@ export default function NotificationSettings() {
                   placeholder="Custom message template. Available variables: {alert_name}, {severity}, {source_ip}, {timestamp}"
                   value={formData.message_template}
                   onChange={(e) =>
-                    setFormData({ ...formData, message_template: e.target.value })
+                    setFormData({
+                      ...formData,
+                      message_template: e.target.value,
+                    })
                   }
                   rows={4}
                 />
@@ -675,8 +746,8 @@ export default function NotificationSettings() {
             </AlertDialogHeader>
 
             <AlertDialogBody>
-              Are you sure? This notification rule will be permanently deleted and can't be
-              recovered.
+              Are you sure? This notification rule will be permanently deleted
+              and can't be recovered.
             </AlertDialogBody>
 
             <AlertDialogFooter>
