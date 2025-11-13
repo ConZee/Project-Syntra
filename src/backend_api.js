@@ -129,6 +129,14 @@ export async function getIDSHealth() {
   return res.json();
 }
 
+export async function getComponentHealth() {
+  const res = await fetch(`${API}/api/health/components`, {
+    headers: { ...getAuthHeader() }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 export async function getSystemAlerts() {
   const res = await fetch(`${API}/api/system/alerts`, {
     headers: { ...getAuthHeader() }
@@ -230,7 +238,7 @@ export async function testNotification(id) {
   return res.json();
 }
 
-// Alert Metadata Management APIs
+// Alert Metadata APIs - for persisting analyst annotations
 export async function saveAlertMetadata(alertId, metadata) {
   const res = await fetch(`${API}/api/alerts/metadata`, {
     method: 'POST',
@@ -238,34 +246,61 @@ export async function saveAlertMetadata(alertId, metadata) {
       'Content-Type': 'application/json',
       ...getAuthHeader()
     },
-    body: JSON.stringify({
-      alert_id: alertId,
-      ...metadata
-    })
+    body: JSON.stringify({ alertId, ...metadata })
   });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || `HTTP ${res.status}`);
+
+  // 207 Multi-Status indicates partial success - treat as success
+  if (res.status === 207) {
+    const result = await res.json();
+    console.warn(`⚠️ Partial save for alert metadata`, result.errors);
+    return result; // Return partial success data
   }
+
+  if (!res.ok) {
+    let errorMsg = `HTTP ${res.status}`;
+    try {
+      const error = await res.json();
+      errorMsg = error.error || errorMsg;
+    } catch (e) {
+      // Response is not JSON (e.g., 404 HTML page)
+      console.error('Failed to save alert metadata. Backend endpoint may not exist.');
+      errorMsg = 'Backend endpoint not available';
+    }
+    throw new Error(errorMsg);
+  }
+
   return res.json();
 }
 
 export async function saveAlertMetadataBulk(alertIds, metadata) {
-  const res = await fetch(`${API}/api/alerts/metadata`, {
+  const res = await fetch(`${API}/api/alerts/metadata/bulk`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeader()
     },
-    body: JSON.stringify({
-      alert_ids: alertIds,
-      ...metadata
-    })
+    body: JSON.stringify({ alertIds, ...metadata })
   });
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || `HTTP ${res.status}`);
+
+  // 207 Multi-Status indicates partial success - treat as success
+  if (res.status === 207) {
+    const result = await res.json();
+    console.warn(`⚠️ Partial save: ${result.successCount}/${alertIds.length} alerts saved`, result.errors);
+    return result; // Return partial success data
   }
+
+  if (!res.ok) {
+    let errorMsg = `HTTP ${res.status}`;
+    try {
+      const error = await res.json();
+      errorMsg = error.error || errorMsg;
+    } catch (e) {
+      console.error('Failed to save bulk alert metadata. Backend endpoint may not exist.');
+      errorMsg = 'Backend endpoint not available';
+    }
+    throw new Error(errorMsg);
+  }
+
   return res.json();
 }
 
@@ -273,12 +308,24 @@ export async function getAlertMetadata(alertId) {
   const res = await fetch(`${API}/api/alerts/metadata/${alertId}`, {
     headers: { ...getAuthHeader() }
   });
+
   if (res.status === 404) {
-    return null; // No metadata found
+    // Alert metadata not found - return null
+    return null;
   }
+
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+    let errorMsg = `HTTP ${res.status}`;
+    try {
+      const error = await res.json();
+      errorMsg = error.error || errorMsg;
+    } catch (e) {
+      console.error('Failed to get alert metadata.');
+      errorMsg = 'Backend endpoint not available';
+    }
+    throw new Error(errorMsg);
   }
+
   return res.json();
 }
 
@@ -286,8 +333,23 @@ export async function getAllAlertMetadata() {
   const res = await fetch(`${API}/api/alerts/metadata`, {
     headers: { ...getAuthHeader() }
   });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+
+  if (res.status === 404) {
+    // No metadata found - return empty array
+    return [];
   }
+
+  if (!res.ok) {
+    let errorMsg = `HTTP ${res.status}`;
+    try {
+      const error = await res.json();
+      errorMsg = error.error || errorMsg;
+    } catch (e) {
+      console.error('Failed to get all alert metadata. Returning empty array.');
+      return []; // Gracefully handle missing endpoint
+    }
+    throw new Error(errorMsg);
+  }
+
   return res.json();
 }

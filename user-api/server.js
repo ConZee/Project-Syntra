@@ -52,8 +52,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Tiny health endpoints
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'user-api' }));
+// Elasticsearch health check endpoint
 app.get('/api/health/es', async (req, res) => {
   try {
     const info = await es.info();
@@ -196,6 +195,27 @@ db.run(`
 `, (err) => {
   if (err) console.error('Error creating dashboard_layouts table:', err);
   else console.log('✅ Dashboard Layouts table ready');
+});
+
+// Alert Metadata table - stores analyst annotations for alerts
+db.run(`
+  CREATE TABLE IF NOT EXISTS alert_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_id TEXT NOT NULL UNIQUE,
+    classification TEXT,
+    status TEXT,
+    tags TEXT,
+    triageLevel TEXT,
+    notes TEXT,
+    severity INTEGER,
+    archived INTEGER DEFAULT 0,
+    archiveReason TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+  )
+`, (err) => {
+  if (err) console.error('Error creating alert_metadata table:', err);
+  else console.log('✅ Alert Metadata table ready');
 });
 
 // JWT-based RBAC middleware
@@ -1477,6 +1497,87 @@ app.get('/api/health/ids', authorize(['Platform Administrator', 'Security Analys
   }
 });
 
+// GET /api/health/components - Get health status of all system components
+app.get('/api/health/components', authorize(['Platform Administrator', 'Security Analyst']), async (req, res) => {
+  const components = {
+    suricata: 'unknown',
+    zeek: 'unknown',
+    database: 'unknown',
+    lastCheck: new Date().toISOString()
+  };
+
+  // Check SQLite database health
+  try {
+    await new Promise((resolve, reject) => {
+      db.get('SELECT 1 as test', [], (err, row) => {
+        if (err) {
+          console.error('[Component Health] SQLite error:', err);
+          reject(err);
+        } else if (!row || row.test !== 1) {
+          reject(new Error('Invalid response'));
+        } else {
+          resolve();
+        }
+      });
+    });
+    components.database = 'online';
+    console.log('[Component Health] SQLite: online');
+  } catch (err) {
+    console.error('[Component Health] SQLite: offline -', err.message);
+    components.database = 'offline';
+  }
+
+  // Check Suricata status
+  try {
+    const suricataCheck = await es.search({
+      index: ['filebeat-*', '.ds-filebeat-*'],
+      size: 1,
+      sort: [{ '@timestamp': { order: 'desc' } }],
+      query: {
+        bool: {
+          must: [{ match: { 'event.module': 'suricata' } }],
+          filter: [{ range: { '@timestamp': { gte: 'now-10m' } } }]
+        }
+      }
+    }).catch(() => null);
+
+    if (suricataCheck && suricataCheck.hits?.hits?.length > 0) {
+      components.suricata = 'online';
+    } else {
+      components.suricata = 'offline';
+    }
+  } catch (err) {
+    console.error('[Component Health] Suricata check error:', err);
+    components.suricata = 'offline';
+  }
+
+  // Check Zeek status
+  try {
+    const zeekCheck = await es.search({
+      index: ['filebeat-*', '.ds-filebeat-*'],
+      size: 1,
+      sort: [{ '@timestamp': { order: 'desc' } }],
+      query: {
+        bool: {
+          must: [{ match: { 'event.module': 'zeek' } }],
+          filter: [{ range: { '@timestamp': { gte: 'now-10m' } } }]
+        }
+      }
+    }).catch(() => null);
+
+    if (zeekCheck && zeekCheck.hits?.hits?.length > 0) {
+      components.zeek = 'online';
+    } else {
+      components.zeek = 'offline';
+    }
+  } catch (err) {
+    console.error('[Component Health] Zeek check error:', err);
+    components.zeek = 'offline';
+  }
+
+  res.json(components);
+});
+
 // Enhanced GET /api/health - System health with detailed info
 app.get('/api/health', async (req, res) => {
   const health = {
@@ -1484,30 +1585,29 @@ app.get('/api/health', async (req, res) => {
     uptime: process.uptime(),
     version: '1.0.0',
     environment: process.env.NODE_ENV || 'production',
-    elasticsearch: 'unknown',
     database: 'online',
     timestamp: new Date().toISOString()
   };
 
-  // Check Elasticsearch
-  try {
-    await es.ping();
-    health.elasticsearch = 'online';
-  } catch (err) {
-    health.elasticsearch = 'offline';
-    health.status = 'degraded';
-  }
-
-  // Check database
+  // Check SQLite database
   try {
     await new Promise((resolve, reject) => {
-      db.get('SELECT 1', (err) => {
-        if (err) reject(err);
-        else resolve();
+      db.get('SELECT 1 as test', [], (err, row) => {
+        if (err) {
+          console.error('[System Health] SQLite check failed:', err);
+          reject(err);
+        } else if (!row || row.test !== 1) {
+          reject(new Error('Invalid SQLite response'));
+        } else {
+          resolve();
+        }
       });
     });
     health.database = 'online';
+    health.status = 'healthy';
+    console.log('[System Health] SQLite database is healthy');
   } catch (err) {
+    console.error('[System Health] SQLite database error:', err);
     health.database = 'offline';
     health.status = 'critical';
   }
@@ -1521,14 +1621,27 @@ app.get('/api/system/alerts', authorize(['Platform Administrator', 'Security Ana
   const now = new Date();
 
   try {
-    // Check Elasticsearch health
+    // Check SQLite database health
     try {
-      await es.ping();
+      await new Promise((resolve, reject) => {
+        db.get('SELECT 1 as test', [], (err, row) => {
+          if (err) {
+            console.error('[System Alerts] SQLite check failed:', err);
+            reject(err);
+          } else if (!row || row.test !== 1) {
+            reject(new Error('Invalid SQLite response'));
+          } else {
+            resolve();
+          }
+        });
+      });
+      console.log('[System Alerts] SQLite database is healthy');
     } catch (err) {
+      console.error('[System Alerts] SQLite database error:', err);
       alerts.push({
         type: 'Database Health',
         severity: 'critical',
-        message: 'Elasticsearch is not responding',
+        message: 'SQLite database is not responding',
         timestamp: now.toISOString(),
         source: 'Database Monitor'
       });
@@ -1574,6 +1687,215 @@ app.get('/api/users/recent', authorize(['Platform Administrator', 'Security Anal
         return res.status(500).json({ error: err.message });
       }
       res.json(rows || []);
+    }
+  );
+});
+
+// ==================== Alert Metadata Endpoints ====================
+// These endpoints allow Security Analysts to save and retrieve alert annotations
+
+// POST /api/alerts/metadata - Save or update metadata for a single alert
+app.post('/api/alerts/metadata', authorize(['Security Analyst', 'Platform Administrator']), async (req, res) => {
+  const { alertId, classification, status, tags, triageLevel, notes, severity, archived, archiveReason } = req.body;
+
+  if (!alertId) {
+    return res.status(400).json({ error: 'alertId is required' });
+  }
+
+  const now = new Date().toISOString();
+  const tagsJson = Array.isArray(tags) ? JSON.stringify(tags) : tags;
+
+  try {
+    // Check if record exists
+    const existing = await new Promise((resolve, reject) => {
+      db.get('SELECT created_at FROM alert_metadata WHERE alert_id = ?', [alertId], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    const createdAt = existing ? existing.created_at : now;
+
+    // Insert or replace the record
+    await new Promise((resolve, reject) => {
+      db.run(`
+        INSERT OR REPLACE INTO alert_metadata
+        (alert_id, classification, status, tags, triageLevel, notes, severity, archived, archiveReason, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        alertId,
+        classification,
+        status,
+        tagsJson,
+        triageLevel,
+        notes,
+        severity,
+        archived ? 1 : 0,
+        archiveReason,
+        createdAt,
+        now
+      ], (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    console.log(`✅ Saved metadata for alert: ${alertId.substring(0, 50)}...`);
+    res.json({ success: true, alertId });
+  } catch (err) {
+    console.error('[POST /api/alerts/metadata] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/alerts/metadata/bulk - Save metadata for multiple alerts
+app.post('/api/alerts/metadata/bulk', authorize(['Security Analyst', 'Platform Administrator']), async (req, res) => {
+  const { alertIds, classification, status, tags, triageLevel, notes, severity, archived, archiveReason } = req.body;
+
+  if (!Array.isArray(alertIds) || alertIds.length === 0) {
+    return res.status(400).json({ error: 'alertIds array is required' });
+  }
+
+  console.log(`[Bulk Save] Saving metadata for ${alertIds.length} alerts`);
+
+  const now = new Date().toISOString();
+  const tagsJson = Array.isArray(tags) ? JSON.stringify(tags) : tags;
+
+  let successCount = 0;
+  const errors = [];
+
+  // Process alerts sequentially
+  for (const alertId of alertIds) {
+    try {
+      // Check if record exists
+      const existing = await new Promise((resolve, reject) => {
+        db.get('SELECT created_at FROM alert_metadata WHERE alert_id = ?', [alertId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+
+      const createdAt = existing ? existing.created_at : now;
+
+      // Insert or replace the record
+      await new Promise((resolve, reject) => {
+        db.run(`
+          INSERT OR REPLACE INTO alert_metadata
+          (alert_id, classification, status, tags, triageLevel, notes, severity, archived, archiveReason, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          alertId,
+          classification,
+          status,
+          tagsJson,
+          triageLevel,
+          notes,
+          severity,
+          archived ? 1 : 0,
+          archiveReason,
+          createdAt,
+          now
+        ], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      successCount++;
+    } catch (err) {
+      console.error(`[Bulk Save] Error checking alert ${alertId}:`, err);
+      errors.push({ alertId, error: err.message });
+    }
+  }
+
+  console.log(`[POST /api/alerts/metadata/bulk] ${successCount} succeeded, ${errors.length} failed:`, errors.slice(0, 3));
+
+  if (successCount === 0) {
+    return res.status(500).json({ error: 'Failed to save all alerts', errors });
+  }
+
+  if (errors.length > 0) {
+    // Partial success - return 207 Multi-Status
+    return res.status(207).json({
+      successCount,
+      failCount: errors.length,
+      errors: errors.slice(0, 10) // Return first 10 errors
+    });
+  }
+
+  res.json({ success: true, count: successCount });
+});
+
+// GET /api/alerts/metadata/:alertId - Get metadata for a specific alert
+app.get('/api/alerts/metadata/:alertId', authorize(['Security Analyst', 'Platform Administrator']), (req, res) => {
+  const { alertId } = req.params;
+
+  db.get(
+    'SELECT * FROM alert_metadata WHERE alert_id = ?',
+    [alertId],
+    (err, row) => {
+      if (err) {
+        console.error('[GET /api/alerts/metadata/:alertId] DB error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      if (!row) {
+        return res.status(404).json({ error: 'Alert metadata not found' });
+      }
+
+      // Parse tags if it's a JSON string
+      if (row.tags) {
+        try {
+          if (typeof row.tags === 'string' && row.tags.trim()) {
+            row.tags = JSON.parse(row.tags);
+          } else if (!row.tags.trim()) {
+            row.tags = [];
+          }
+        } catch (e) {
+          console.warn('[GET /api/alerts/metadata/:alertId] Failed to parse tags:', e.message);
+          row.tags = [];
+        }
+      } else {
+        row.tags = [];
+      }
+
+      res.json(row);
+    }
+  );
+});
+
+// GET /api/alerts/metadata - Get all alert metadata
+app.get('/api/alerts/metadata', authorize(['Security Analyst', 'Platform Administrator']), (req, res) => {
+  db.all(
+    'SELECT * FROM alert_metadata ORDER BY updated_at DESC',
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error('[GET /api/alerts/metadata] DB error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      // Parse tags for each row
+      const processed = (rows || []).map(row => {
+        if (row.tags) {
+          try {
+            if (typeof row.tags === 'string' && row.tags.trim()) {
+              row.tags = JSON.parse(row.tags);
+            } else if (typeof row.tags === 'string' && !row.tags.trim()) {
+              row.tags = [];
+            }
+          } catch (e) {
+            console.warn('[GET /api/alerts/metadata] Failed to parse tags for alert:', row.alert_id, e.message);
+            row.tags = [];
+          }
+        } else {
+          row.tags = [];
+        }
+        return row;
+      });
+
+      console.log(`📋 Loading saved metadata for ${processed.length} alert(s)`);
+      res.json(processed);
     }
   );
 });
