@@ -26,19 +26,15 @@ export function AuthProvider({ children }) {
 
       if (isFirstLoad) {
         // First load after npm start - clear everything
+        console.log('Development mode: First load - Cleared authentication data');
         localStorage.removeItem("accessToken");
         localStorage.removeItem("user");
-        localStorage.removeItem("syntra_token");
-        localStorage.removeItem("syntra_user");
         sessionStorage.setItem('session_initialized', 'true');
-        console.log("Development mode: First load - Cleared authentication data");
         return null;
       }
-      // Subsequent page refreshes - keep auth if valid
-      console.log("Development mode: Page refresh - Preserving authentication");
+      // Subsequent loads - check for valid token
     }
 
-    // Normal behavior for production (and dev after first load)
     const token = localStorage.getItem("accessToken");
     // Clear if expired
     if (token && isTokenExpired(token)) {
@@ -50,15 +46,6 @@ export function AuthProvider({ children }) {
   });
 
   const [user, setUser] = useState(() => {
-    // Skip loading user only on first development load
-    if (process.env.NODE_ENV === 'development') {
-      const isFirstLoad = !sessionStorage.getItem('session_initialized');
-      if (isFirstLoad) {
-        return null;
-      }
-    }
-
-    // Normal behavior for production (and dev after first load)
     const token = localStorage.getItem("accessToken");
     // Only load user if token is valid
     if (token && !isTokenExpired(token)) {
