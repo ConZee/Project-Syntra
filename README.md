@@ -5,6 +5,7 @@ The system centralises security events from IDS sensors, manages multi-role acce
 
 This repository contains both the **React frontend** and the **Node.js backend**.
 
+
 ## 🚀 Features
 
 ### Frontend (React + Chakra UI)
@@ -34,40 +35,6 @@ Located in `/user-api`:
 - **Elasticsearch client** for threat-intelligence enrichment
 - Migration script: `migrate_alert_table.js`
 
-Backend starts using:
-```bash
-npm start
-```
-
-## 🛠️ Getting Started
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/ConZee/Project-Syntra
-cd Project-Syntra
-```
-
-### 2. Install Frontend Dependencies
-```bash
-npm install
-```
-
-### 3. Start the Frontend
-```bash
-npm start
-```
-Runs by default on: **http://localhost:3000**
-
-### 4. Install Backend Dependencies
-```bash
-cd user-api
-npm install
-```
-
-### 5. Start the Backend API
-```bash
-npm start
-```
 
 ## 🧩 Tech Stack
 
@@ -105,6 +72,7 @@ The backend includes support for Elasticsearch-driven enrichment, enabling:
 - Threat scoring  
 - Alert context enrichment  
 - Future compatibility with external TI feeds  
+
 
 ## 📝 Credits
 
