@@ -9,31 +9,23 @@ This repository contains both the **React frontend** and the **Node.js backend**
 ## 🚀 Features
 
 ### Frontend (React + Chakra UI)
-- Role-based dashboards located under `src/pages`:
+- Role-based dashboards:
   - **Platform Admin**
   - **Network Admin**
   - **Security Analyst**
 - Authentication workflow with **MFA (TOTP)** using the `MFASetup` component.
-- Token-based API authentication integrated through `backend_api.js`.
-- Route segregation for each role via:
-  - `platformAdminRoutes.js`
-  - `networkAdminRoutes.js`
-  - `securityAnalystRoutes.js`
+- Token-based API authentication.
+- Route segregation for each role.
 - UI components based on the Horizon UI design system.
-- Footer components:
-  - `FooterAdmin.js`
-  - `FooterAuth.js`
 
-### Backend (Node.js + Express)
-Located in `/user-api`:
+### Backend (Node.js + Express):
 - **JWT-based authentication**
-- **SQLite database** (`users.db`)
+- **SQLite database** 
 - **Password hashing**
 - **CORS support**
-- **TOTP MFA** (via `speakeasy`)
-- **QR code generation** for MFA (via `qrcode`)
+- **TOTP MFA** 
+- **QR code generation** for MFA 
 - **Elasticsearch client** for threat-intelligence enrichment
-- Migration script: `migrate_alert_table.js`
 
 
 ## 🧩 Tech Stack
@@ -43,7 +35,7 @@ Located in `/user-api`:
 - Chakra UI (Horizon UI component base)
 - React Router
 - ApexCharts
-- Fetch/Axios integration through `backend_api.js`
+- Fetch/Axios integration
 
 ### Backend
 - Node.js
