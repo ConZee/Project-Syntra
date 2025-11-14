@@ -1,6 +1,6 @@
 # Project Syntra – Intrusion Detection System (IDS) Monitoring Dashboard
 
-Project Syntra is a web-based Intrusion Detection and Security Operations dashboard developed as part of our Final Year Project (FYP-25-S3-09).  
+Project Syntra is a web-based Intrusion Detection and Security Operations dashboard developed as part of our Final Year Project (FYP-25-S3-03).  
 The system centralises security events from IDS sensors, manages multi-role access, visualises alerts, and supports threat-intelligence enrichment.
 
 This repository contains both the **React frontend** and the **Node.js backend**.
