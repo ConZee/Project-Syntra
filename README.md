@@ -1,116 +1,127 @@
-# [Horizon UI ⚡️](https://horizon-ui.com/horizon-ui-chakra) [![Tweet](https://img.shields.io/twitter/url/http/shields.io.svg?style=social&logo=twitter)](https://twitter.com/intent/tweet?url=https://horizon-ui.com/&text=Check%20Horizon%20UI,%20the%20trendiest%20open-source%20admin%20template%20for%20Chakra%20UI%20&%20React!)
+# Project Syntra – Intrusion Detection System (IDS) Monitoring Dashboard
 
-![version](https://img.shields.io/badge/version-3.0.0-brightgreen.svg)
-![license](https://img.shields.io/badge/license-MIT-blue.svg)
-[![GitHub issues open](https://img.shields.io/github/issues/horizon-ui/horizon-ui-chakra.svg?maxAge=2592000)](https://github.com/horizon-ui/horizon-ui-chakra/issues?q=is%3Aopen+is%3Aissue)
+Project Syntra is a web-based Intrusion Detection and Security Operations dashboard developed as part of our Final Year Project (FYP-25-S3-09).  
+The system centralises security events from IDS sensors, manages multi-role access, visualises alerts, and supports threat-intelligence enrichment.
 
-<p>&nbsp;</p>
+This repository contains both the **React frontend** and the **Node.js backend**.
 
-[<img alt="Horizon UI" src="https://i.ibb.co/fdyTwz1/introduction-image-2.png" /> ](https://github.com/horizon-ui/horizon-ui-chakra)
+## 🚀 Features
 
-<p>&nbsp;</p>
+### Frontend (React + Chakra UI)
+- Role-based dashboards located under `src/pages`:
+  - **Platform Admin**
+  - **Network Admin**
+  - **Security Analyst**
+- Authentication workflow with **MFA (TOTP)** using the `MFASetup` component.
+- Token-based API authentication integrated through `backend_api.js`.
+- Route segregation for each role via:
+  - `platformAdminRoutes.js`
+  - `networkAdminRoutes.js`
+  - `securityAnalystRoutes.js`
+- UI components based on the Horizon UI design system.
+- Footer components:
+  - `FooterAdmin.js`
+  - `FooterAuth.js`
 
-Get started and build your dream web app with Horizon UI, the most trendiest &
-innovative Open Source Admin Template for Chakra UI & React!
+### Backend (Node.js + Express)
+Located in `/user-api`:
+- **JWT-based authentication**
+- **SQLite database** (`users.db`)
+- **Password hashing**
+- **CORS support**
+- **TOTP MFA** (via `speakeasy`)
+- **QR code generation** for MFA (via `qrcode`)
+- **Elasticsearch client** for threat-intelligence enrichment
+- Migration script: `migrate_alert_table.js`
 
----
-
-### Introduction
-
-Designed for those who like modern UI elements and beautiful websites. Made of
-hundred of elements, designed blocks and fully coded pages, Horizon UI is ready
-to help you create stunning websites and webapps.
-
-Save hundreds of hours trying to create and develop a dashboard from scratch.
-The fastest, most responsive & trendiest dashboard is here. Seriously.
-
-With Horizon UI you will find many examples for pages like NFTs Pages,
-Authentication Pages, Profile and so on. Just choose between a Basic Design or a
-cover and you are good to go!
-
-### 🎉 [NEW] Horizon UI Components
-
-All the main components from both versions, this will help you to see and interact with all & the latest added components of Horizon (also, new components are on the way, stay tuned)! ⚡️
-<a href="https://horizon-ui.com/components/?ref=readme-horizon" target="_blank">See all components</a>
-
-### Documentation
-
-Each element is well presented in a very complex documentation. You can read
-more about the <a href="https://horizon-ui.com/documentation/docs/introduction?ref=readme-horizon" target="_blank">documentation
-here.</a>
-
-### Quick Start
-
-Install Horizon UI by running either of the following:
-
-- Install NodeJS LTS from
-  [NodeJs Official Page](https://nodejs.org/en/?ref=horizon-documentation)
-  (NOTE: Product only works with LTS version)
-
-Clone the repository with the following command:
-
-```bash
-git clone https://github.com/horizon-ui/horizon-ui-chakra.git
-```
-
-Run in terminal this command:
-
-```bash
-npm install
-```
-
-Then run this command to start your local server
-
+Backend starts using:
 ```bash
 npm start
 ```
 
-### Example Pages
+## 🛠️ Getting Started
 
-If you want to get inspiration or just show something directly to your clients,
-you can jump start your development with our pre-built example pages. You will
-be able to quickly set up the basic structure for your web project. View
-<a href="https://horizon-ui.com/horizon-ui-chakra/?ref=readme-horizon" target="_blank">example
-pages here.</a>
+### 1. Clone the Repository
+```bash
+git clone https://github.com/ConZee/Project-Syntra
+cd Project-Syntra
+```
 
-### Versions
+### 2. Install Frontend Dependencies
+```bash
+npm install
+```
 
-| Free Version                                                                                                       | PRO Version                                                                                                               |
-| ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| [![Horizon UI](https://i.ibb.co/fdyTwz1/introduction-image-2.png)](https://www.horizon-ui.com/?ref=readme-horizon) | [![Horizon UI PRO](https://i.ibb.co/R6jFKRM/introduction-image-1.png)](https://www.horizon-ui.com/pro?ref=readme-horizon) |
+### 3. Start the Frontend
+```bash
+npm start
+```
+Runs by default on: **http://localhost:3000**
 
-### Figma Version
+### 4. Install Backend Dependencies
+```bash
+cd user-api
+npm install
+```
 
-Horizon UI is available in Figma format as well! Check it out on Figma
-Community! 🎨
-[See the Horizon UI Figma design files](https://bit.ly/horizon-figma)
+### 5. Start the Backend API
+```bash
+npm start
+```
 
-### Reporting Issues
+## 🧩 Tech Stack
 
-We use GitHub Issues as the official bug tracker for the Horizon UI. Here are
-some advices for our users that want to report an issue:
+### Frontend
+- React.js
+- Chakra UI (Horizon UI component base)
+- React Router
+- ApexCharts
+- Fetch/Axios integration through `backend_api.js`
 
-1. Make sure that you are using the latest version of the Horizon UI Dashbaord.
-   Check the CHANGELOG from your dashboard on our
-   [CHANGE LOG File](https://github.com/horizon-ui/horizon-ui-chakra/blob/main/CHANGELOG.md?ref=readme-horizon).
-2. Providing us reproducible steps for the issue will shorten the time it takes
-   for it to be fixed.
-3. Some issues may be browser specific, so specifying in what browser you
-   encountered the issue might help.
+### Backend
+- Node.js
+- Express
+- SQLite3
+- JWT authentication
+- Speakeasy (TOTP MFA)
+- Qrcode (QR generation)
+- @elastic/elasticsearch
 
----
+## 🔐 Authentication & Security
 
-### Community
+Project Syntra implements:
+- Local user accounts stored in SQLite  
+- Hashed passwords  
+- Token-based authentication using JWT  
+- Multi-Factor Authentication via TOTP  
+- **Role-Based Access Control (RBAC)** for:
+  - **Platform Admin**
+  - **Network Admin**
+  - **Security Analyst**
 
-Connect with the community! Feel free to ask questions, report issues, and meet
-new people that already use Horizon UI!
+## 🧠 Threat Intelligence Integration
 
-💬 [Join the #HorizonUI Discord Community!](https://discord.gg/f6tEKFBd4m)
+The backend includes support for Elasticsearch-driven enrichment, enabling:
+- Threat scoring  
+- Alert context enrichment  
+- Future compatibility with external TI feeds  
 
-### Copyright and license
+## 📝 Credits
 
-⭐️ [Copyright 2023 Simmmple ](https://www.simmmple.com/?ref=readme-horizon)
+This project uses **Horizon UI (React + Chakra UI)** as the initial design and component reference.
 
-📄 [Horizon UI License](https://www.simmmple.com/licenses?ref=readme-horizon)
+**Credit:**  
+Horizon UI React – https://horizon-ui.com  
+© Simmmple – https://simmmple.com  
 
-UI based on Horizon UI (MIT © Simmmple)
+## 📄 License
+
+This project follows the license included in this repository.
+
+## 👥 Contributors
+
+Chia Yi Ting
+Chung Jung Han
+Foo Zhi Yuan
+Phua Jian Wei
+Sri Rafhanah Bte Rudi
